@@ -1,6 +1,5 @@
 \name{squeezy-package}
 \alias{squeezy-package}
-\alias{squeezy}
 \docType{package}
 \title{
 \packageTitle{squeezy}
@@ -9,11 +8,7 @@
 \packageDescription{squeezy}
 }
 \details{
-
-The DESCRIPTION file:
-\packageDESCRIPTION{squeezy}
-\packageIndices{squeezy}
-~~ An overview of how to use the package, including the most important functions ~~
+See \code{\link{squeezy}} for example code.
 }
 \author{
 \packageAuthor{squeezy}
@@ -21,14 +16,12 @@ The DESCRIPTION file:
 Maintainer: \packageMaintainer{squeezy}
 }
 \references{
-~~ Literature or other references for background information ~~
+Mirrelijn M. van Nee, Tim van de Brug, Mark A. van de Wiel, "Fast marginal likelihood estimation of penalties for group-adaptive elastic net.", 2020
 }
-~~ Optionally other standard keywords, one per line, from file KEYWORDS in the R documentation directory ~~
-\keyword{ package }
+
 \seealso{
-~~ Optional links to other man pages, e.g. ~~
-~~ \code{\link[<pkg>:<pkg>-package]{<pkg>}} ~~
+
 }
 \examples{
-~~ simple examples of the most important functions ~~
+
 }

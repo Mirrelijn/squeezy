@@ -76,22 +76,7 @@ Minimum value of lambda that is added to exp(loglambdas); set to 0 as default.
 %% ~~objects to See Also as \code{\link{help}}, ~~~
 }
 \examples{
-##---- Should be DIRECTLY executable !! ----
-##-- ==>  Define data, use random,
-##--	or do  help(data=index)  for the standard data sets.
 
-## The function is currently defined as
-function (loglambdas, XXblocks, Y, sigmasq = 1, Xunpen = NULL, 
-    intrcpt = F, model, minlam = 0) 
-{
-    minLL <- minML.LA.ridgeGLM(loglambdas, XXblocks, Y, sigmasq = sigmasq, 
-        Xunpen = Xunpen, intrcpt = intrcpt, model = model, minlam = minlam)
-    k <- length(XXblocks)
-    if (model == "linear") 
-        k <- k + 1
-    AIC <- 2 * minLL + 2 * k
-    return(AIC)
-  }
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory (show via RShowDoc("KEYWORDS")):

@@ -804,9 +804,9 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
 
 #auxiliary function
 #log-determinant; needed below
-logdet <- function(mat) return(determinant(mat,logarithm=T)$modulus[1])
+.logdet <- function(mat) return(determinant(mat,logarithm=T)$modulus[1])
 
-SigmaBlocks <- function(XXblocks,lambdas){ #computes X Laminv X^T from block cross-products
+.SigmaBlocks <- function(XXblocks,lambdas){ #computes X Laminv X^T from block cross-products
   nblocks <- length(XXblocks)
   if(nblocks != length(lambdas)){
     print("Error: Number of penalty parameters should equal number of blocks")
@@ -844,7 +844,7 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
     sigmasq <- lambdas[1]
     lambdas <- lambdas[-1]
   }
-  Lam0inv <- SigmaBlocks(XXblocks,lambdas) 
+  Lam0inv <- .SigmaBlocks(XXblocks,lambdas) 
   if(!is.null(Xunpen)){
     fit <- IWLSridge(XXT=Lam0inv,Y=Y, model=model,intercept=intrcpt,
                      X1=Xunpen,maxItr = 500,eps=10^-12,offset=offset) #Fit. fit$etas contains the n linear predictors
@@ -871,7 +871,7 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   }
   
   t2 <- -1/2/sigmasq*sum(c(Y-mu)*eta)
-  t3 <- 1/2 * logdet(diag(rep(1,n))-W%*%Hpen)
+  t3 <- 1/2 * .logdet(diag(rep(1,n))-W%*%Hpen)
   #return(-t2)
   return(-(t1+t2+t3))
 }
@@ -904,7 +904,7 @@ dminML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
     lambdas <- lambdas[-1]
   }
   rhos<-log(lambdas)
-  Lam0inv <- SigmaBlocks(XXblocks,lambdas) 
+  Lam0inv <- .SigmaBlocks(XXblocks,lambdas) 
   if(!is.null(Xunpen)){
     fit <- IWLSridge(XXT=Lam0inv,Y=Y, model=model,intercept=intrcpt,
                      X1=Xunpen,maxItr = 500,eps=10^-12,offset=offset) #Fit. fit$etas contains the n linear predictors
@@ -983,7 +983,7 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   return(AIC)
 }
 
-cv.squeezy <- function(Y,X,folds,type.measure="MSE",...){
+.cv.squeezy <- function(Y,X,folds,type.measure="MSE",...){
   #Input:
   #X: nxp observed data matrix
   #Y: n-dimensional vector for response
@@ -1007,7 +1007,7 @@ cv.squeezy <- function(Y,X,folds,type.measure="MSE",...){
   }
   
   if(is.numeric(folds)){ #number of folds given
-    folds2<-produceFolds(n,folds,Y,balance=balance,model=model) #produce folds balanced in response
+    folds2<-.produceFolds(n,folds,Y,balance=balance,model=model) #produce folds balanced in response
   }else{
     folds2 <- folds
   }
@@ -1081,7 +1081,7 @@ cv.squeezy <- function(Y,X,folds,type.measure="MSE",...){
   return(list("Res"=Res,"dfPred"=df,"dfGrps"=dfGrps,"dfCVM"=dfCVM))
 }
 
-traintest.squeezy <- function(Y,X,Y2,X2,type.measure="MSE",
+.traintest.squeezy <- function(Y,X,Y2,X2,type.measure="MSE",
                                 multi_grouping=F,grouping,
                                 args.ecpc=NULL,ecpcinit=T,
                               ncores=1,
@@ -1281,7 +1281,7 @@ traintest.squeezy <- function(Y,X,Y2,X2,type.measure="MSE",
   return(list("Res"=Res,"dfPred"=df,"dfGrps"=dfGrps,"dfCVM"=dfCVM))
 }
 
-outercv.glmnet <- function(Y,X,folds,type.measure="MSE",...){
+.outercv.glmnet <- function(Y,X,folds,type.measure="MSE",...){
   #Input:
   #X: nxp observed data matrix
   #Y: n-dimensional vector for response
@@ -1305,7 +1305,7 @@ outercv.glmnet <- function(Y,X,folds,type.measure="MSE",...){
   }
   
   if(is.numeric(folds)){ #number of folds given
-    folds2<-produceFolds(n,folds,Y,balance=balance,model=model) #produce folds balanced in response
+    folds2<-.produceFolds(n,folds,Y,balance=balance,model=model) #produce folds balanced in response
   }else{
     folds2 <- folds
   }
@@ -1382,7 +1382,7 @@ outercv.glmnet <- function(Y,X,folds,type.measure="MSE",...){
   return(list("Res"=Res,"dfPred"=df,"dfGrps"=dfGrps,"dfCVM"=dfCVM))
 }
 
-traintest.glmnet <- function(Y,X,Y2,X2,type.measure="MSE",
+.traintest.glmnet <- function(Y,X,Y2,X2,type.measure="MSE",
                                ...){
   #Input:
   #X: nxp observed data matrix
@@ -1487,9 +1487,43 @@ traintest.glmnet <- function(Y,X,Y2,X2,type.measure="MSE",
   return(list("Res"=Res,"dfPred"=df,"dfGrps"=dfGrps,"dfCVM"=dfCVM))
 }
 
+.Hunpen <- function(WV,XXT,X1){
+  #Function from multiridge-package written by Mark van de Wiel
+  #WV:weigths as vector (n)
+  #XXT: sample cross-product (nxn) penalized variables
+  #X1 (p1xn) design matrix unpenalized variables
+  n <- length(WV)
+  WsqrtV <- sqrt(WV)
+  WinvsqrtV <- 1/WsqrtV
+  X1W <- WsqrtV * X1
+  X1aux <- solve(t(X1W) %*% X1W) %*% t(X1W)
+  X1Wproj <- X1W %*% X1aux
+  P1W <- diag(n) - X1Wproj
+  GammaW <- t(t(WsqrtV * XXT) * WsqrtV) #faster
+  P1GammaW <- P1W %*% GammaW
+  # cons <- mean(abs(P1GammaW))
+  # solve(diag(n)/cons+P1GammaW/cons)
+  invforH2<-try(solve(diag(n) + P1GammaW))
+  if(class(invforH2)[1]=="try-error"){
+    svdXXT <- svd(diag(n) + P1GammaW)
+    svdd <- svdXXT$d
+    #reci <- 1/svdd[1:n]
+    reci <- c(1/svdd[1:n-1],0)
+    invforH2 <- svdXXT$v %*% (reci * t(svdXXT$u))
+  }
+  #invforH2 <- solve(diag(n) + P1GammaW)
+  #H2 <- Winvsqrt %*% GammaW %*% (diag(n) -invforH2 %*% P1GammaW) %*% P1W %*% Winvsqrt
+  MW <- WsqrtV * t(t((diag(n) - invforH2 %*% P1GammaW) %*% P1W) * WinvsqrtV)
+  H20 <- GammaW %*% (WinvsqrtV * MW)
+  H2 <- t(t(WinvsqrtV * H20)) #faster
+  #Hboth <- Winvsqrt %*% X1Wproj %*% (diag(n) - Wsqrt %*% H2 %*% Wsqrt) %*% Winvsqrt + H2
+  KW <- t(t(X1aux %*% (diag(n) - t(t(WsqrtV * H2) * WsqrtV))) * WinvsqrtV)
+  Hmat <-(WinvsqrtV * X1W) %*% KW  + H2
+  return(list(Hmat=Hmat,MW=MW,KW=KW))
+}
 
 #Produce balanced folds----
-produceFolds <- function(nsam,outerfold,response,model="logistic",balance=TRUE,fixedfolds=F){
+.produceFolds <- function(nsam,outerfold,response,model="logistic",balance=TRUE,fixedfolds=F){
   if(fixedfolds) set.seed(3648310) #else set.seed(NULL)
   if(model=="linear") balance=F
   if(!balance){
