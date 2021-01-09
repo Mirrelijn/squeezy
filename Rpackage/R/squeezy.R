@@ -1,6 +1,6 @@
 squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
                       X2=NULL,Y2=NULL,unpen=NULL,intrcpt=T,
-                      method=c("fixed.ecpc","MML","MML.noDeriv","CV"),
+                      method=c("ecpcEN","MML","MML.noDeriv","CV"),
                       fold=10,compareMR = T,selectAIC=F,
                       fit.ecpc=NULL,
                       lambdas=NULL,lambdaglobal=NULL,
@@ -33,7 +33,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
     method <- "MML"
   }
   switch(method,
-         "fixed.ecpc"={
+         "ecpcEN"={
            if(is.null(fit.ecpc)) stop("provide ecpc fit results")
            if(is.null(lambdas)) lambdas <- fit.ecpc$sigmahat/(fit.ecpc$gamma*fit.ecpc$tauglobal)
            if(is.null(lambdaglobal)) lambdaglobal <- fit.ecpc$sigmahat/fit.ecpc$tauglobal
@@ -549,7 +549,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   # points(betaGLM2[groupings[[1]][[1]]],betaGLM[groupings[[1]][[1]]],col="red")
   
   #Transform penalties and compute elastic net betas with glmnet
-  if(alpha <1){
+  if(alpha <= 1){
     varFunc <- function(lam,alpha=0.5,tausq){
       t1 <- - alpha/(1-alpha)^(3/2)/sqrt(lam)*
         exp(dnorm(alpha*sqrt(lam)/sqrt(1-alpha),log=T) -
@@ -563,23 +563,34 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
         lamEN <- 1/tausq
       }else if(alpha==1){
         lamEN <- sqrt(2/tausq)
-      }else if(tausq < 0.5 & alpha>0.95){
+      }else if(tausq>10^6){
+        lamEN <- 1/tausq
+        if(alpha>0.2){
+          lb2 <- 10^-6
+          ub2 <- sqrt(2/10^6)
+          temp <- try(uniroot(varFunc,c(0.9*lb2,1.1*ub2),alpha=alpha,tausq=10^6,tol=10^-6))
+          if(class(temp)[1]!="try-error"){
+            if(temp$root<lamEN) lamEN <- temp$root
+          }
+        }
+      }else if(tausq<10^-6){
         lamEN <- sqrt(2/tausq)
-      }else if(tausq < 10^-7){
-        #solve using approximation for mill's ratio for large value
-        a <- tausq^2*(1-alpha)^3-2*tausq*alpha^2*(1-alpha)
-        b <- alpha^2-2*tausq*(1-alpha)^2
-        c <- 1- alpha
-        D <- b^2-4*a*c
-        lamEN <- -b-sqrt(D)/2/a
-        if(sign(lamEN)!=1) lamEN <- -b+sqrt(D)/2/a 
+        if(alpha<0.8){
+          lb2 <- sqrt(2/10^-7)
+          ub2 <- 10^7
+          temp <- try(uniroot(varFunc,c(0.9*lb2,1.1*ub2),alpha=alpha,tausq=10^-7,tol=10^-6))
+          if(class(temp)[1]!="try-error"){
+            if(temp$root>lamEN) lamEN <- temp$root
+          }
+        }
       }else{
         lb <- min(1/tausq,sqrt(2/tausq))
         ub <- max(1/tausq,sqrt(2/tausq))
         #if(sign(varFunc(0.9*lb,alpha=alpha,tausq=tausq))==sign(varFunc(1.1*ub,alpha=alpha,tausq=tausq))) browser()
         temp <- try(uniroot(varFunc,c(0.9*lb,1.1*ub),alpha=alpha,tausq=tausq,tol=10^-6))
         if(class(temp)[1]=="try-error"){
-          lamEN <- sqrt(2/tausq)
+          if(tausq<0.5) lamEN <- sqrt(2/tausq)
+          if(tausq>0.5) lamEN <- 1/tausq
         }else{
           lamEN <- temp$root
         }
@@ -628,50 +639,50 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
     a0 <- temp[1]
     #plot(beta)
     #print(lambdaEN/n*sd_y)
-  }else if(alpha==1){ #Compute lasso estimate directly
-    tauEN <-  sqrt(sigmahat/2/lambdas) #Laplace prior parameter estimates
-    lambdasEN <- sqrt(sigmahat)/sd_y * sqrt(2*lambdas) #=1/tauL*sigmahat/sd_y
-    lambdap<- lambda/(as.vector(gamma%*%Zt)) #=sigmahat/(tauglobal*as.vector(gamma%*%Zt)) #specific ridge penalty for beta_k
-    lambdap[lambdap<0]<-Inf
-    
-    penfctr2 <- penfctr
-    penfctr2[pen] <- sqrt(sigmahat)/sd_y * sqrt(2*lambdap[pen]) 
-    not0 <- which(penfctr2!=Inf)
-    lambda1 <- sum(penfctr2[not0])/length(penfctr2[not0])
-    penfctr2 <- penfctr2/lambda1
-    if(model=="cox"){
-      glmGR <- glmnet(X[,not0],Y,alpha=1,family=fml,standardize = F,
-                      penalty.factor=penfctr2[not0], thresh=10^-10)
-    }else{
-      glmGR <- glmnet(X[,not0],Y,alpha=1,family=fml,
-                      intercept = intrcpt, standardize = F,
-                      penalty.factor=penfctr2[not0], thresh=10^-10)
-    }
-    
-    if(reCV){
-      glmGR.cv <- cv.glmnet(X[,not0],Y,alpha=1,family=fml,
-                            intercept = intrcpt, standardize = F,
-                            penalty.factor=penfctr2[not0], thresh=10^-10)
-      sopt <- glmGR.cv$lambda.min
-    } else sopt <- lambda1/n*sd_y
-    
-    temp <- coef(glmGR,s=sopt,exact=T,x=X[,not0],y=Y,
-                 penalty.factor=penfctr2[not0],family=fml,intercept=intrcpt) 
-    beta <- rep(0,p); beta[not0] <- temp[-1]
-    a0 <- temp[1]
-    #plot(beta)
-    #print(lambda1/n*sd_y)
-    
-    # browser()
-    # #or with penalized:
-    # penfctr2 <- penfctr
-    # penfctr2[pen] <- sqrt(sigmahat)/sd_y * sqrt(2*lambdap[pen])
-    # penLasso <- penalized(penalized=X[,not0],response=Y/sd_y,model=model,
-    #                       lambda1 = penfctr2,
-    #                       standardize = F)
-    # betaPEN <- rep(0,p); betaPEN[not0] <- penLasso@penalized*sd_y
-    # a0PEN <- penLasso@unpenalized
-    # plot(betaPEN,beta); abline(0,1)
+  # }else if(alpha==1){ #Compute lasso estimate directly
+  #   tauEN <-  sqrt(sigmahat/2/lambdas) #Laplace prior parameter estimates
+  #   lambdasEN <- sqrt(sigmahat)/sd_y * sqrt(2*lambdas) #=1/tauL*sigmahat/sd_y #note not same notation as above
+  #   lambdap<- lambda/(as.vector(gamma%*%Zt)) #=sigmahat/(tauglobal*as.vector(gamma%*%Zt)) #specific ridge penalty for beta_k
+  #   lambdap[lambdap<0]<-Inf
+  #   
+  #   penfctr2 <- penfctr
+  #   penfctr2[pen] <- sqrt(sigmahat)/sd_y * sqrt(2*lambdap[pen]) 
+  #   not0 <- which(penfctr2!=Inf)
+  #   lambda1 <- sum(penfctr2[not0])/length(penfctr2[not0])
+  #   penfctr2 <- penfctr2/lambda1
+  #   if(model=="cox"){
+  #     glmGR <- glmnet(X[,not0],Y,alpha=1,family=fml,standardize = F,
+  #                     penalty.factor=penfctr2[not0], thresh=10^-10)
+  #   }else{
+  #     glmGR <- glmnet(X[,not0],Y,alpha=1,family=fml,
+  #                     intercept = intrcpt, standardize = F,
+  #                     penalty.factor=penfctr2[not0], thresh=10^-10)
+  #   }
+  #   
+  #   if(reCV){
+  #     glmGR.cv <- cv.glmnet(X[,not0],Y,alpha=1,family=fml,
+  #                           intercept = intrcpt, standardize = F,
+  #                           penalty.factor=penfctr2[not0], thresh=10^-10)
+  #     sopt <- glmGR.cv$lambda.min
+  #   } else sopt <- lambda1/n*sd_y
+  #   
+  #   temp <- coef(glmGR,s=sopt,exact=T,x=X[,not0],y=Y,
+  #                penalty.factor=penfctr2[not0],family=fml,intercept=intrcpt) 
+  #   beta <- rep(0,p); beta[not0] <- temp[-1]
+  #   a0 <- temp[1]
+  #   #plot(beta)
+  #   #print(lambda1/n*sd_y)
+  #   
+  #   # browser()
+  #   # #or with penalized:
+  #   # penfctr2 <- penfctr
+  #   # penfctr2[pen] <- sqrt(sigmahat)/sd_y * sqrt(2*lambdap[pen])
+  #   # penLasso <- penalized(penalized=X[,not0],response=Y/sd_y,model=model,
+  #   #                       lambda1 = penfctr2,
+  #   #                       standardize = F)
+  #   # betaPEN <- rep(0,p); betaPEN[not0] <- penLasso@penalized*sd_y
+  #   # a0PEN <- penLasso@unpenalized
+  #   # plot(betaPEN,beta); abline(0,1)
   }else{stop("alpha should be between 0 and 1")}
   
   if(standardise_Y){
