@@ -818,8 +818,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
 }
 
 minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
-                             Xunpen=NULL,intrcpt=F,model,minlam=0,opt.sigma=F,
-                             offset=NULL){
+                             Xunpen=NULL,intrcpt=F,model,minlam=0,opt.sigma=F){
   #compute Laplace approximation (LA) of the minus log marginal likelihood of ridge penalised GLMs
   #(NOTE: for now only implemented for linear and logistic)
   #Input:
@@ -832,7 +831,6 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   #model: "linear" or "logistic" 
   #opt.sigma: (linear case) T/F if log(sigma^2) is given as first argument of 
   #           loglambdas for optimisation purposes
-  #offset: (optional) n-dimensional vector with offset for linear predictors. 
   if(model!="linear"){
     opt.sigma <- F
     sigmasq <- 1
@@ -847,10 +845,10 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   Lam0inv <- .SigmaBlocks(XXblocks,lambdas) 
   if(!is.null(Xunpen)){
     fit <- IWLSridge(XXT=Lam0inv,Y=Y, model=model,intercept=intrcpt,
-                     X1=Xunpen,maxItr = 500,eps=10^-12,offset=offset) #Fit. fit$etas contains the n linear predictors
+                     X1=Xunpen,maxItr = 500,eps=10^-12) #Fit. fit$etas contains the n linear predictors
   }else{
     fit <- IWLSridge(XXT=Lam0inv,Y=Y, model=model,intercept=intrcpt,
-                     maxItr = 500,eps=10^-12,offset=offset) #Fit. fit$etas contains the n linear predictors
+                     maxItr = 500,eps=10^-12) #Fit. fit$etas contains the n linear predictors
   }
   eta <- fit$etas + fit$eta0
   
@@ -877,8 +875,7 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
 }
 
 dminML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
-                             Xunpen=NULL,intrcpt=F,model,minlam=0,opt.sigma=F,
-                             offset=NULL){
+                             Xunpen=NULL,intrcpt=F,model,minlam=0,opt.sigma=F){
   #compute Laplace approximation (LA) of the first derivative of the minus log 
   #  marginal likelihood of ridge penalised GLMs
   #(NOTE: for now only implemented for linear and logistic)
@@ -893,7 +890,6 @@ dminML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   #minlam: minimum of lambda that is added to the value given (useful in optimisation settings)
   #opt.sigma: (linear case) T/F if derivative to log(sigma^2) should be given for optimisation purposes
   #           Note that sigma^2 should then be given as the first argument of loglambdas     
-  #offset: (optional) n-dimensional vector with offset for linear predictors. 
   
   if(model!="linear") opt.sigma <- F
   
@@ -907,10 +903,10 @@ dminML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   Lam0inv <- .SigmaBlocks(XXblocks,lambdas) 
   if(!is.null(Xunpen)){
     fit <- IWLSridge(XXT=Lam0inv,Y=Y, model=model,intercept=intrcpt,
-                     X1=Xunpen,maxItr = 500,eps=10^-12,offset=offset) #Fit. fit$etas contains the n linear predictors
+                     X1=Xunpen,maxItr = 500,eps=10^-12) #Fit. fit$etas contains the n linear predictors
   }else{
     fit <- IWLSridge(XXT=Lam0inv,Y=Y, model=model,intercept=intrcpt,
-                     maxItr = 500,eps=10^-12,offset=offset) #Fit. fit$etas contains the n linear predictors
+                     maxItr = 500,eps=10^-12) #Fit. fit$etas contains the n linear predictors
   }
   eta <- fit$etas + fit$eta0
   

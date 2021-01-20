@@ -12,7 +12,7 @@ Returns the partial derivatives (w.r.t. 'loglambdas') of the minus log Laplace a
 \usage{
 dminML.LA.ridgeGLM(loglambdas, XXblocks, Y, sigmasq = 1, 
                   Xunpen = NULL, intrcpt = F, model, minlam = 0, 
-                  opt.sigma = F, offset = NULL)
+                  opt.sigma = F)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -53,10 +53,6 @@ Minimum value of lambda that is added to exp(loglambdas); set to 0 as default.
 %%     ~~Describe \code{opt.sigma} here~~
 (linear model only) T/F if log(sigmasq) is given as first argument of 
   loglambdas for optimisation purposes
-}
-  \item{offset}{
-%%     ~~Describe \code{offset} here~~t
-(optional) n-dimensional vector with offset for linear predictors. 
 }
 }
 \details{
