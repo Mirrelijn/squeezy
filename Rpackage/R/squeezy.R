@@ -737,8 +737,8 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   #Return output----
   output <- list(betaApprox = beta, #lasso
                  a0Approx = a0,
-                 tauApprox = tauEN, #prior parameter estimates
-                 lambdaApprox = lambdasEN,
+                 #tauApprox = tauEN, #prior parameter estimates
+                 lambdaApprox = lambdasEN, #elastic net group penalty
                  tauMR = sigmahat/lambdas, #prior parameter estimates
                  lambdaMR = lambdas,
                  lambdaglobal = lambda,

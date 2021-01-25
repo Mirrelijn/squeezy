@@ -131,6 +131,71 @@ T/F should the elastic net penalties be recalibrated by cross-validation of a gl
 %%  \item{comp1 }{Description of 'comp1'}
 %%  \item{comp2 }{Description of 'comp2'}
 %% ...
+\item{betaApprox}{
+Estimated regression coefficients of the group-adaptive elastic net model; p-dimensional vector.
+}
+\item{a0Approx}{
+Estimated intercept of the group-adaptive elastic net model; scalar.
+}
+\item{lambdaApprox}{
+Estimated group penalty parameters of the group-adaptive elastic net model; G-dimensional vector.
+}
+\item{tauMR}{
+Estimated group variances of the multi-ridge model; G-dimensional vector.
+}
+\item{lambdaMR}{
+Estimated group penalties of the multi-ridge model; G-dimensional vector.
+}
+\item{lambdaglobal}{
+Estimated global ridge penalty; scalar.
+}
+\item{sigmahat}{
+(linear model) Estimated sigma^2; scalar.
+}
+\item{MLinit}{
+Min log marginal likelihood value at initial group penalties; scalar.
+}
+\item{MLfinal}{
+Min log marginal likelihood value at estimated group penalties; scalar.
+}
+
+If `compareMR'=TRUE, multi-ridge model is returned as well:
+\item{betaMR}{
+Estimated regression coefficients of the multi-ridge model; p-dimensional vector.
+}
+\item{a0MR}{
+Estimated intercept of the multi-ridge model; scalar.
+}
+
+If independent test set `X2' is given, predictions and MSE are returned:
+\item{YpredApprox}{
+Predictions for the test set of the estimated group-adaptive elastic net model.
+}
+\item{MSEApprox}{
+Mean squared error on the test set of the estimated group-adaptive elastic net model.
+}
+\item{YpredMR}{
+Predictions for the test set of the estimated group-adaptive multi-ridge model.
+}
+\item{MSEMR}{
+Mean squared error on the test set of the estimated group-adaptive multi-ridge model.
+}
+
+If `selectAIC'=TRUE, the multi-group or single-group model with best AIC is selected.
+Results in `betaApprox', `a0Approx', `lambdaApprox' contain those results of the best model.
+Summary results of both models are included as well:
+\item{AICmodels}{
+List with elements ``multigroup" and ``onegroup".- Each element is a list with results of the multi-group or single-group model, containing the group penalties (`lambdas'), sigma^2 (`sigmahat', linear model only), and AIC (`AIC').
+
+If besides `selectAIC'=TRUE, also `resultsAICboth'=TRUE, the fit of both the single-group model and multi-group model as obtained with \link{squeezy} are returned (`fit').
+}
+\item{modelbestAIC}{
+Either ``onegroup" or ``multigroup" for the selected model.
+}
+
+
+
+
 }
 \references{
 %% ~put references to the literature/web site here ~
@@ -148,4 +213,73 @@ T/F should the elastic net penalties be recalibrated by cross-validation of a gl
 %% ~~objects to See Also as \code{\link{help}}, ~~~
 }
 \examples{
+# #####################
+# # Simulate toy data #
+# #####################
+# p<-600 #number of covariates
+# n<-100 #sample size training data set
+# n2<-100 #sample size test data set
+# G<- 5 #number of groups
+# 
+# taugrp <- rep(c(0.05,0.1,0.2,0.5,1),each=p/G) #ridge prior variance
+# groupIndex <- rep(1:G,each=p/G) #groups for co-data
+# grouping <- lapply(1:G,function(x){which(groupIndex==x)}) #grouping with each element one group
+# sigmasq <- 2 #linear regression noise
+# lambda1 <- sqrt(taugrp/2) #corresponding lasso penalty
+# #A Laplace(0,b) variate can also be generated as the difference of two i.i.d. 
+# #Exponential(1/b) random variables
+# betas <-   rexp(p, 1/lambda1) -  rexp(p, 1/lambda1) #regression coefficients
+# X <- matrix(rnorm(n*p),n,p) #simulate training data
+# Y <- rnorm(n,X%*%betas,sd=sqrt(sigmasq)) 
+# X2 <- matrix(rnorm(n*p),n,p) #simulate test data
+# Y2 <- rnorm(n,X2%*%betas,sd=sqrt(sigmasq)) 
+# 
+# ############### 
+# # Fit squeezy #
+# ###############
+# #may be fit directly..
+# res.squeezy <- squeezy(Y,X,grouping=grouping,Y2=Y2,X2=X2,
+#                            model="linear",alpha=0.5) 
+#                            
+# #..or with ecpc-fit as initialisation
+# res.ecpc <- ecpc(Y,X, #observed data and response to train model
+#                groupings=list(grouping), #informative co-data grouping
+#                Y2=Y2,X2=X2, #test data
+#                model="linear",
+#                hypershrinkage="none",postselection = F) 
+# res.squeezy <- squeezy(Y,X, #observed data and response to train model
+#                        grouping=grouping, #informative co-data grouping
+#                        Y2=Y2,X2=X2, #test data
+#                        fit.ecpc = res.ecpc, #ecpc-fit for initial values
+#                        model="linear", #type of model for the response
+#                        alpha=0.5) #elastic net mixing parameter 
+# 
+# summary(res.squeezy$betaApprox) #estimated elastic net regression coefficients
+# summary(res.squeezy$betaMR) #estimated multi-ridge regression coefficients
+# res.squeezy$lambdaApprox #estimated group elastic net penalties
+# res.squeezy$tauMR #multi-ridge group variances
+# res.squeezy$MSEApprox #MSE group-elastic net model
+# res.squeezy$MSEMR #MSE group-ridge model
+# 
+# #once fit, quickly find model fit for different values of alpha:
+# res.squeezy2 <- squeezy(Y,X, #observed data and response to train model
+#                        grouping=grouping, #informative co-data grouping
+#                        Y2=Y2,X2=X2, #test data
+#                        lambdas = res.squeezy$lambdaMR, #fix lambdas at multi-ridge estimate
+#                        model="linear", #type of model for the response
+#                        alpha=0.9) #elastic net mixing parameter 
+# 
+# #Select single-group model or multi-group model based on best AIC
+# res.squeezy <- squeezy(Y,X, #observed data and response to train model
+#                        grouping=grouping, #informative co-data grouping
+#                        Y2=Y2,X2=X2, #test data
+#                        fit.ecpc = res.ecpc, #ecpc-fit for initial values
+#                        model="linear", #type of model for the response
+#                        alpha=0.5, #elastic net mixing parameter 
+#                        selectAIC = T,resultsAICboth = T) 
+# 
+# res.squeezy$modelbestAIC #selected model
+# res.squeezy$AICmodels$multigroup$fit$MSEApprox #MSE on test set of multi-group model
+# res.squeezy$AICmodels$onegroup$fit$MSEApprox #MSE on test set of single-group model
+
 }
