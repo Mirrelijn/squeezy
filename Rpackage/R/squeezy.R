@@ -464,7 +464,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   
   
   #Compute regression model----
-  if(compareMR){
+  if(compareMR||alpha==0){
     #Compute ridge betas with multiridge
     XXT <- SigmaFromBlocks(XXbl,penalties=lambdas) #create nxn Sigma matrix = sum_b [lambda_b)^{-1} X_b %*% t(X_b)]
     if(sum((1:p)%in%unpen)>0){
@@ -612,33 +612,39 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
       lambdap <- lambdasENuniquehat[indUnique]
     }
     
-    penfctr2 <- penfctr
-    penfctr2[pen] <- lambdap[pen] 
-    not0 <- which(penfctr2!=Inf)
-    lambdaEN <- sum(penfctr2[not0])/length(penfctr2[not0])
-    penfctr2 <- penfctr2/lambdaEN
-    if(model=="cox"){
-      glmGR <- glmnet(X[,not0],Y,alpha=alphat,family=fml,standardize = F,
-                      penalty.factor=penfctr2[not0], thresh=10^-10)
+    if(alpha==0){
+      beta <- betaMR
+      a0 <- a0MR
     }else{
-      glmGR <- glmnet(X[,not0],Y,alpha=alphat,family=fml,
-                      intercept = intrcpt, standardize = F,
-                      penalty.factor=penfctr2[not0], thresh=10^-10)
+      penfctr2 <- penfctr
+      penfctr2[pen] <- lambdap[pen] 
+      not0 <- which(penfctr2!=Inf)
+      lambdaEN <- sum(penfctr2[not0])/length(penfctr2[not0])
+      penfctr2 <- penfctr2/lambdaEN
+      if(model=="cox"){
+        glmGR <- glmnet(X[,not0],Y,alpha=alphat,family=fml,standardize = F,
+                        penalty.factor=penfctr2[not0], thresh=10^-10)
+      }else{
+        glmGR <- glmnet(X[,not0],Y,alpha=alphat,family=fml,
+                        intercept = intrcpt, standardize = F,
+                        penalty.factor=penfctr2[not0], thresh=10^-10)
+      }
+      
+      if(reCV){
+        glmGR.cv <- cv.glmnet(X[,not0],Y,alpha=alphat,family=fml,
+                              intercept = intrcpt, standardize = F,
+                              penalty.factor=penfctr2[not0], thresh=10^-10)
+        sopt <- glmGR.cv$lambda.min
+      } else sopt <- lambdaEN/n*sd_y
+      
+      temp <- coef(glmGR,s=sopt,exact=T,x=X[,not0],y=Y,alpha=alphat,
+                   penalty.factor=penfctr2[not0],family=fml,intercept=intrcpt) 
+      beta <- rep(0,p); beta[not0] <- temp[-1]
+      a0 <- temp[1]
+      #plot(beta)
+      #print(lambdaEN/n*sd_y)
     }
     
-    if(reCV){
-      glmGR.cv <- cv.glmnet(X[,not0],Y,alpha=alphat,family=fml,
-                            intercept = intrcpt, standardize = F,
-                            penalty.factor=penfctr2[not0], thresh=10^-10)
-      sopt <- glmGR.cv$lambda.min
-    } else sopt <- lambdaEN/n*sd_y
-    
-    temp <- coef(glmGR,s=sopt,exact=T,x=X[,not0],y=Y,alpha=alphat,
-                 penalty.factor=penfctr2[not0],family=fml,intercept=intrcpt) 
-    beta <- rep(0,p); beta[not0] <- temp[-1]
-    a0 <- temp[1]
-    #plot(beta)
-    #print(lambdaEN/n*sd_y)
   # }else if(alpha==1){ #Compute lasso estimate directly
   #   tauEN <-  sqrt(sigmahat/2/lambdas) #Laplace prior parameter estimates
   #   lambdasEN <- sqrt(sigmahat)/sd_y * sqrt(2*lambdas) #=1/tauL*sigmahat/sd_y #note not same notation as above
