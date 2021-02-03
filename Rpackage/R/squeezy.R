@@ -97,6 +97,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
              Y <- Y/sd_y
              sd_y_former <- sd_y
              sd_y <- 1
+             if(!is.null(sigmasq)) sigmasq <- sigmasq/sd_y_former
            }
            if(method=="MML") minlam <- max(minlam,10^-4*var(Y))
          },
