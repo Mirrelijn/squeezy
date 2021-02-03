@@ -695,6 +695,10 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   if(standardise_Y){
     beta <- beta*sd_y_former
     a0 <- a0*sd_y_former
+    if(compareMR){
+      betaMR <- betaMR*sd_y_former
+      a0MR <- a0MR*sd_y_former
+    }
   }  
   
   #Compute predictions for independent data if given----
