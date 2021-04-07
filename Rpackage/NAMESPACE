@@ -1,5 +1,3 @@
-export(".cv.squeezy", "dminML.LA.ridgeGLM", ".logdet", "minML.LA.ridgeGLM",
-       ".outercv.glmnet", ".produceFolds", ".SigmaBlocks", "squeezy", ".traintest.glmnet", ".traintest.squeezy")
 import(stats)
 import(graphics)
 import(glmnet) 
