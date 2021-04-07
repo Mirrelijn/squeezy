@@ -212,7 +212,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   #Find global lambda if not given for initial penalty and/or for AIC comparison----
   if(is.null(lambdaglobal)){
     #find initial global lambda
-    cvperblock <- fastCV(list(Xxtnd),Y=Y,kfold=fold,fixedfolds = F,X1=Xunpen,intercept=intrcpt)
+    cvperblock <- fastCV2(list(Xxtnd),Y=Y,kfold=fold,fixedfolds = F,X1=Xunpen,intercept=intrcpt)
     lambda <- cvperblock$lambdas
     lambda[lambda==Inf] <- 10^6
   }else{
