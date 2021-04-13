@@ -274,7 +274,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
                                          sigmasq=sigmasq) #TD: intercept?
       lambda <- lambda1groupfit$optpen
     }else if(method=="MML"){
-      sigmahat<-1 
+      sigmahat<-sd_y 
       if(!is.null(sigmasq) & model=="linear") sigmahat <- sigmasq
       
       if(opt.sigma){
@@ -298,7 +298,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   }
   
   #find estimate for sigma for 1 group for AIC comparison
-  sigmahat <- 1
+  sigmahat <- sd_y
   if(model=="linear"){
     if(!is.null(sigmasq)) sigmahat <- sigmasq
     else{
