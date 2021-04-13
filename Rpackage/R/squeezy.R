@@ -1,4 +1,4 @@
-squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
+squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
                       X2=NULL,Y2=NULL,unpen=NULL,intrcpt=T,
                       method=c("ecpcEN","MML","MML.noDeriv","CV"),
                       fold=10,compareMR = T,selectAIC=F,
@@ -10,7 +10,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
                       resultsAICboth=F){
   #Y: response
   #X: observed data
-  #grouping: list with index of covariates of co-data groups
+  #groupset: list with index of covariates of co-data groups
   #alpha: elastic net penalty parameter (as in glmnet)
   #X2: independent observed data
   #Y2: independent response data
@@ -23,7 +23,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   #selectAIC: T/F to compare AIC of multiridge model and ordinary ridge model. Return best one.
   
   #Set-up variables ---------------------------------------------------------------------------
-  groupings <- list(grouping)
+  groupsets <- list(groupset)
   n <- dim(X)[1] #number of samples
   p <- dim(X)[2] #number of covariates 
   if(!is.null(X2)) n2<-dim(X2)[1] #number of samples in independent data set x2 if given
@@ -139,21 +139,21 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   penfctr <- rep(1,p) #factor=1 for penalised covariates
   if(length(unpen)>0){
     penfctr[unpen] <- 0 #factor=0 for unpenalised covariates
-    if(any(unlist(groupings)%in%unpen)){
-      warning("Unpenalised covariates removed from grouping")
-      for(i in 1:length(groupings)){
-        for(j in 1:length(groupings[[i]])){
-          if(all(groupings[[i]][[j]]%in%unpen)){
-            groupings[[i]][[j]] <- NULL #remove whole group if all covariates unpenalised
+    if(any(unlist(groupsets)%in%unpen)){
+      warning("Unpenalised covariates removed from group set")
+      for(i in 1:length(groupsets)){
+        for(j in 1:length(groupsets[[i]])){
+          if(all(groupsets[[i]][[j]]%in%unpen)){
+            groupsets[[i]][[j]] <- NULL #remove whole group if all covariates unpenalised
           }else{
-            groupings[[i]][[j]] <- groupings[[i]][[j]][!(groupings[[i]][[j]]%in%unpen)]
+            groupsets[[i]][[j]] <- groupsets[[i]][[j]][!(groupsets[[i]][[j]]%in%unpen)]
           }
         }
       }
     }
   }
   
-  G <- sapply(groupings,length) #1xm vector with G_i, number of groups in partition i
+  G <- sapply(groupsets,length) #1xm vector with G_i, number of groups in partition i
   m <- length(G) #number of partitions
   
   indGrpsGlobal <- list(1:G[1]) #global group index in case we have multiple partitions
@@ -162,12 +162,12 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
       indGrpsGlobal[[i]] <- (sum(G[1:(i-1)])+1):sum(G[1:i])
     }
   }
-  Kg <- lapply(groupings,function(x)(sapply(x,length))) #m-list with G_i vector of group sizes in partition i
+  Kg <- lapply(groupsets,function(x)(sapply(x,length))) #m-list with G_i vector of group sizes in partition i
   #ind1<-ind
   
   #ind <- (matrix(1,G,1)%*%ind)==(1:G)#sparse matrix with ij element T if jth element in group i, otherwise F
   i<-unlist(sapply(1:sum(G),function(x){rep(x,unlist(Kg)[x])}))
-  j<-unlist(unlist(groupings))
+  j<-unlist(unlist(groupsets))
   ind <- sparseMatrix(i,j,x=1) #sparse matrix with ij element 1 if jth element in group i (global index), otherwise 0
   
   Ik <- lapply(1:m,function(i){
@@ -176,7 +176,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
     as.vector(x%*%ind)}) #list for each partition with px1 vector with number of groups beta_k is in
   #sparse matrix with ij element 1/Ij if beta_j in group i
   
-  #make co-data matrix Z (Zt transpose of Z as in paper, with co-data matrices stacked for multiple groupings)
+  #make co-data matrix Z (Zt transpose of Z as in paper, with co-data matrices stacked for multiple groupsets)
   Zt<-ind; 
   if(G[1]>1){
     Zt[1:G[1],]<-t(t(ind[1:G[1],])/apply(ind[1:G[1],],2,sum))
@@ -194,7 +194,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   
   
   #Extend data to make artifical non-overlapping groups----
-  Xxtnd <- do.call(cbind,lapply(groupings[[1]],function(group){t(t(X[,group])/sqrt(Ik[[1]][group]))}))
+  Xxtnd <- do.call(cbind,lapply(groupsets[[1]],function(group){t(t(X[,group])/sqrt(Ik[[1]][group]))}))
   #create new group indices for Xxtnd
   Kg2 <- c(1,Kg[[1]]) 
   G2 <- length(Kg2)-1
@@ -205,7 +205,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   if(sum((1:p)%in%unpen)>0) Xunpen<-X[,(1:p)%in%unpen] #seperate matrix for unpenalised variables
   
   #datablockNo <- groupxtnd2
-  #datablocks <- groupxtnd (or grouping if no overlapping groups)
+  #datablocks <- groupxtnd (or groupset if no overlapping groups)
   
   #datablocks: list with each element a data type containing indices of covariates with that data type 
   Xbl <- createXblocks(lapply(groupxtnd,function(ind) Xxtnd[,ind]))
@@ -459,7 +459,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   
   #May compare 1 group versus multiple groups with AIC
   if(selectAIC){
-    # res1group <- squeezy(Y=Y,X=X,grouping=list(1:p),alpha=0,model=model,
+    # res1group <- squeezy(Y=Y,X=X,groupset=list(1:p),alpha=0,model=model,
     #                        unpen=unpen,intrcpt=intrcpt,
     #                        fold=fold,sigmasq=sigmasq,method=method,
     #                        compareMR = F,selectAIC=F)
@@ -513,8 +513,8 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
     if(intrcpt) a0MR <- c(betafit[[1]][1]) #intercept
     betaMR <- rep(0,p) 
     betaMR[(1:p)%in%unpen] <- betafit[[1]][-1] #unpenalised variables
-    for(i in 1:length(groupings[[1]])){
-      betaMR[groupings[[1]][[i]]] <- betaMR[groupings[[1]][[i]]] + betafit[[1+i]]/sqrt(Ik[[1]][groupings[[1]][[i]]])
+    for(i in 1:length(groupsets[[1]])){
+      betaMR[groupsets[[1]][[i]]] <- betaMR[groupsets[[1]][[i]]] + betafit[[1+i]]/sqrt(Ik[[1]][groupsets[[1]][[i]]])
     }  
     rm(betafit)
   }
@@ -582,7 +582,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   # }
   # betaGLM2 <- rep(0,p); betaGLM2[not0] <- temp[-1]
   # plot(betaGLM2,betaGLM); abline(0,1); 
-  # points(betaGLM2[groupings[[1]][[1]]],betaGLM[groupings[[1]][[1]]],col="red")
+  # points(betaGLM2[groupsets[[1]][[1]]],betaGLM[groupsets[[1]][[1]]],col="red")
   
   #Transform penalties and compute elastic net betas with glmnet
   if(alpha <= 1){
@@ -842,7 +842,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
       output$AICmodels$multigroup$sigmahat <- sigmahatNotOptimalAIC
     }
     if(resultsAICboth){
-        output$AICmodels$onegroup$fit <- squeezy(Y,X,grouping,alpha=alpha,model=model,
+        output$AICmodels$onegroup$fit <- squeezy(Y,X,groupset,alpha=alpha,model=model,
                 X2=X2,Y2=Y2,unpen=unpen,intrcpt=intrcpt,
                 method="MML",fold=fold,
                 compareMR = compareMR,selectAIC=F,
@@ -850,7 +850,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
                 lambdas=rep(lambda1group,G),lambdaglobal=lambda1group,
                 sigmasq=sigmahat1group,
                 standardise_Y=standardise_Y,reCV=standardise_Y,resultsAICboth=F)
-        output$AICmodels$multigroup$fit <- squeezy(Y,X,grouping,alpha=alpha,model=model,
+        output$AICmodels$multigroup$fit <- squeezy(Y,X,groupset,alpha=alpha,model=model,
                        X2=X2,Y2=Y2,unpen=unpen,intrcpt=intrcpt,
                        method="MML",fold=fold,
                        compareMR = compareMR,selectAIC=F,
@@ -1075,7 +1075,7 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   nfolds <- length(folds2)
   
   
-  grpsno <- 1:length(more.args$grouping) #vector with group numbers of the grouping
+  grpsno <- 1:length(more.args$groupset) #vector with group numbers of the group set
   
   Res <- list() #list for raw data
   df <- data.frame() #data frame for prediction results
@@ -1143,7 +1143,7 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
 }
 
 .traintest.squeezy <- function(Y,X,Y2,X2,type.measure="MSE",
-                                multi_grouping=F,grouping,
+                                multi_groupset=F,groupset,
                                 args.ecpc=NULL,ecpcinit=T,
                               ncores=1,
                                 ...){
@@ -1152,8 +1152,8 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   #Y: n-dimensional vector for response
   #X2: independent test observed data
   #Y2: independent test response data
-  #multi_grouping: is a separate grouping given for train/test data sets?
-  #grouping: as in squeezy, or list of groupings for each train/test data set
+  #multi_groupset: is a separate groupset given for train/test data sets?
+  #groupset: as in squeezy, or list of groupsets for each train/test data set
   #type.measure: type of performance measure for evaluation (MSE or AUC)
   #args.ecpc: list with arguments used for ecpc function
   #ecpcinit: T/F should ecpc be fit for initialisation?
@@ -1191,21 +1191,21 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
       n <- dim(X[[i]])[1] #number of samples
       p <- dim(X[[i]])[2] #number of covariates
       
-      if(!multi_grouping) groupingTemp <- grouping
-      else groupingTemp <- grouping[[i]]
-      grpsno <- 1:length(groupingTemp) #vector with group numbers of the grouping
+      if(!multi_groupset) groupsetTemp <- groupset
+      else groupsetTemp <- groupset[[i]]
+      grpsno <- 1:length(groupsetTemp) #vector with group numbers of the groupset
       
       if(ecpcinit){
         tic <- proc.time()[[3]]
         res <- do.call(ecpc,args=c(list(X=X[[i]],Y=Y[[i]],
                                         X2=X2[[i]],Y2=Y2[[i]],
-                                        groupings=list(groupingTemp),
+                                        groupsets=list(groupsetTemp),
                                         hypershrinkage="none",postselection = F,model=model),
                                    args.ecpc)
         )
         Res[[i]] <- do.call(squeezy,args=c(list(X=X[[i]],Y=Y[[i]],
                                                 X2=X2[[i]],Y2=Y2[[i]],
-                                                grouping=groupingTemp,fit.ecpc=res),
+                                                groupset=groupsetTemp,fit.ecpc=res),
                                            args.squeezy)
         )
         toc <- proc.time()[[3]]
@@ -1214,7 +1214,7 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
         tic <- proc.time()[[3]]
         Res[[i]] <- do.call(squeezy,args=c(list(X=X[[i]],Y=Y[[i]],
                                                 X2=X2[[i]],Y2=Y2[[i]],
-                                                grouping=groupingTemp),
+                                                groupset=groupsetTemp),
                                            args.squeezy)
         )
         toc <- proc.time()[[3]]
@@ -1250,21 +1250,21 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
            n <- dim(X[[i]])[1] #number of samples
            p <- dim(X[[i]])[2] #number of covariates
            
-           if(!multi_grouping) groupingTemp <- grouping
-           else groupingTemp <- grouping[[i]]
-           grpsno <- 1:length(groupingTemp) #vector with group numbers of the grouping
+           if(!multi_groupset) groupsetTemp <- groupset
+           else groupsetTemp <- groupset[[i]]
+           grpsno <- 1:length(groupsetTemp) #vector with group numbers of the groupset
            
            if(ecpcinit){
              tic <- proc.time()[[3]]
              res <- do.call(ecpc,args=c(list(X=X[[i]],Y=Y[[i]],
                                              X2=X2[[i]],Y2=Y2[[i]],
-                                             groupings=list(groupingTemp),
+                                             groupsets=list(groupsetTemp),
                                              hypershrinkage="none",postselection = F,model=model),
                                         args.ecpc)
              )
              Res[[i]] <- do.call(squeezy,args=c(list(X=X[[i]],Y=Y[[i]],
                                                      X2=X2[[i]],Y2=Y2[[i]],
-                                                     grouping=groupingTemp,fit.ecpc=res),
+                                                     groupset=groupsetTemp,fit.ecpc=res),
                                                 args.squeezy)
              )
              toc <- proc.time()[[3]]
@@ -1273,7 +1273,7 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
              tic <- proc.time()[[3]]
              Res[[i]] <- do.call(squeezy,args=c(list(X=X[[i]],Y=Y[[i]],
                                                      X2=X2[[i]],Y2=Y2[[i]],
-                                                     grouping=groupingTemp),
+                                                     groupset=groupsetTemp),
                                                 args.squeezy)
              )
              toc <- proc.time()[[3]]

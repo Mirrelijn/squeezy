@@ -10,7 +10,7 @@ Group-adaptive elastic net
 This function estimates group-specific elastic net penalties and fits a linear or logistic regression model.
 }
 \usage{
-squeezy(Y, X, grouping, alpha = 1, model = NULL, X2 = NULL, 
+squeezy(Y, X, groupset, alpha = 1, model = NULL, X2 = NULL, 
         Y2 = NULL, unpen = NULL, intrcpt = T, 
         method = c("ecpcEN", "MML", "MML.noDeriv", "CV"), 
         fold = 10, compareMR = T, selectAIC = F, fit.ecpc = NULL, 
@@ -29,9 +29,9 @@ Response data; n-dimensional vector (n: number of samples) for linear and logist
 %%     ~~Describe \code{X} here~~
 Observed data; (nxp)-dimensional matrix (p: number of covariates) with each row the observed high-dimensional feature vector of a sample.
 }
-  \item{grouping}{
-%%     ~~Describe \code{grouping} here~~
-Co-data grouping; list with G groups.  Each group is a vector containing the indices of the covariates in that group.
+  \item{groupset}{
+%%     ~~Describe \code{groupset} here~~
+Co-data group set; list with G groups.  Each group is a vector containing the indices of the covariates in that group.
 }
   \item{alpha}{
 %%     ~~Describe \code{alpha} here~~
@@ -223,7 +223,7 @@ Either ``onegroup" or ``multigroup" for the selected model.
 # 
 # taugrp <- rep(c(0.05,0.1,0.2,0.5,1),each=p/G) #ridge prior variance
 # groupIndex <- rep(1:G,each=p/G) #groups for co-data
-# grouping <- lapply(1:G,function(x){which(groupIndex==x)}) #grouping with each element one group
+# groupset <- lapply(1:G,function(x){which(groupIndex==x)}) #group set with each element one group
 # sigmasq <- 2 #linear regression noise
 # lambda1 <- sqrt(taugrp/2) #corresponding lasso penalty
 # #A Laplace(0,b) variate can also be generated as the difference of two i.i.d. 
@@ -238,17 +238,17 @@ Either ``onegroup" or ``multigroup" for the selected model.
 # # Fit squeezy #
 # ###############
 # #may be fit directly..
-# res.squeezy <- squeezy(Y,X,grouping=grouping,Y2=Y2,X2=X2,
+# res.squeezy <- squeezy(Y,X,groupset=groupset,Y2=Y2,X2=X2,
 #                            model="linear",alpha=0.5) 
 #                            
 # #..or with ecpc-fit as initialisation
 # res.ecpc <- ecpc(Y,X, #observed data and response to train model
-#                groupings=list(grouping), #informative co-data grouping
+#                groupsets=list(groupset), #informative co-data group set
 #                Y2=Y2,X2=X2, #test data
 #                model="linear",
 #                hypershrinkage="none",postselection = F) 
 # res.squeezy <- squeezy(Y,X, #observed data and response to train model
-#                        grouping=grouping, #informative co-data grouping
+#                        groupset=groupset, #informative co-data group set
 #                        Y2=Y2,X2=X2, #test data
 #                        fit.ecpc = res.ecpc, #ecpc-fit for initial values
 #                        model="linear", #type of model for the response
@@ -263,7 +263,7 @@ Either ``onegroup" or ``multigroup" for the selected model.
 # 
 # #once fit, quickly find model fit for different values of alpha:
 # res.squeezy2 <- squeezy(Y,X, #observed data and response to train model
-#                        grouping=grouping, #informative co-data grouping
+#                        groupset=groupset, #informative co-data groupset
 #                        Y2=Y2,X2=X2, #test data
 #                        lambdas = res.squeezy$lambdaMR, #fix lambdas at multi-ridge estimate
 #                        model="linear", #type of model for the response
@@ -271,7 +271,7 @@ Either ``onegroup" or ``multigroup" for the selected model.
 # 
 # #Select single-group model or multi-group model based on best AIC
 # res.squeezy <- squeezy(Y,X, #observed data and response to train model
-#                        grouping=grouping, #informative co-data grouping
+#                        groupset=groupset, #informative co-data group set
 #                        Y2=Y2,X2=X2, #test data
 #                        fit.ecpc = res.ecpc, #ecpc-fit for initial values
 #                        model="linear", #type of model for the response
