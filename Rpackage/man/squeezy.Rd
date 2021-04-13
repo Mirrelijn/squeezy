@@ -147,7 +147,7 @@ Estimated group variances of the multi-ridge model; G-dimensional vector.
 Estimated group penalties of the multi-ridge model; G-dimensional vector.
 }
 \item{lambdaglobal}{
-Estimated global ridge penalty; scalar.
+Estimated global ridge penalty; scalar. Note: only optimised if selectAIC=T or compareMR=T, else the returned crude estimate is sufficient for initialisation of squeezy.
 }
 \item{sigmahat}{
 (linear model) Estimated sigma^2; scalar.

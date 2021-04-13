@@ -28,10 +28,21 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   p <- dim(X)[2] #number of covariates 
   if(!is.null(X2)) n2<-dim(X2)[1] #number of samples in independent data set x2 if given
   
+  if(is.null(model)){
+    if(all(is.element(Y,c(0,1))) || is.factor(Y)){
+      model <- "logistic" 
+    } else if(all(is.numeric(Y)) & !(is.matrix(Y) && dim(Y)[2]==2)){
+      model <- "linear"
+    }else{
+      model <- "cox"
+    }
+  }
+  
   #settings default methods
   if(length(method)==4){
     method <- "MML"
   }
+  
   switch(method,
          "ecpcEN"={
            if(is.null(fit.ecpc)) stop("provide ecpc fit results")
@@ -51,7 +62,7 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
            if(is.null(standardise_Y)) standardise_Y <- F
            if(is.null(opt.sigma)) opt.sigma <- T
            if(is.null(reCV)){
-             reCV <- F; if(!opt.sigma) reCV <- T
+             reCV <- F; if(model!="linear" | !opt.sigma) reCV <- T
            } 
            
          },
@@ -76,18 +87,9 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
            if(is.null(standardise_Y)) standardise_Y <- F
            if(is.null(opt.sigma)) opt.sigma <- F
            if(is.null(reCV)) reCV <- T
-         },
+         }
   )
   
-  if(is.null(model)){
-    if(all(is.element(Y,c(0,1))) || is.factor(Y)){
-      model <- "logistic" 
-    } else if(all(is.numeric(Y)) & !(is.matrix(Y) && dim(Y)[2]==2)){
-      model <- "linear"
-    }else{
-      model <- "cox"
-    }
-  }
 
   switch(model,
          'linear'={
@@ -211,16 +213,49 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
   
   #Find global lambda if not given for initial penalty and/or for AIC comparison----
   if(is.null(lambdaglobal)){
-    #find initial global lambda
-    cvperblock <- fastCV2(list(Xxtnd),Y=Y,kfold=fold,fixedfolds = F,X1=Xunpen,intercept=intrcpt)
-    lambda <- cvperblock$lambdas
-    lambda[lambda==Inf] <- 10^6
+    #find rough estimate of initial global lambda
+    # cvperblock <- fastCV2(list(Xxtnd),Y=Y,kfold=fold,fixedfolds = F,X1=Xunpen,intercept=intrcpt)
+    # lambda <- cvperblock$lambdas
+    # lambda[lambda==Inf] <- 10^6
+    
+    lambdaseq <- 10^c(-10:10)
+    XXbl1 <- list(apply(simplify2array(XXbl),c(1,2),sum))
+    ML <- sapply(log(lambdaseq),function(lam){
+      temp <- try(minML.LA.ridgeGLM(loglambdas = lam,XXblocks = XXbl1,sigmasq=sd_y^2,
+                                    Y=Y,Xunpen=Xunpen,intrcpt = intrcpt,model=model),
+                  silent=T)
+      if(class(temp)[1]!="try-error"){
+        return(temp)
+      }else return(NaN)
+      }
+    )
+    
+    #plot(log(lambdaseq),ML)
+    if(all(is.nan(ML))) stop("Error in estimating global lambda, try standardising data")
+    lambdaseq <- lambdaseq[!is.nan(ML)&(ML!=Inf)]
+    ML <- ML[!is.nan(ML)&(ML!=Inf)]
+    #if multiple lambda with same ML, take least extreme lambda, 
+    #that is within 1 percent of minimal value of difference no/full penalty
+    se <- abs(ML[1]-rev(ML)[1])/100
+    if(ML[1]<rev(ML)[1]){
+      lambda <- rev(lambdaseq)[which.min(rev(ML))]
+      if(lambda==lambdaseq[1]){
+        lambda <- max(lambdaseq[ML<=(min(ML)+se)])
+      }
+    } 
+    else{
+      lambda <- lambdaseq[which.min(ML)]
+      if(lambda==rev(lambdaseq)[1]){
+        lambda <- min(lambdaseq[ML<=(min(ML)+se)])
+      }
+    } 
+    
   }else{
     lambda <- lambdaglobal
   }
     
   #Further optimise global lambda with same method as multi-group for AIC comparison
-  if(selectAIC){
+  if(selectAIC | compareMR){
     if(method=="CV"){
       leftout <- CVfolds(Y=Y,kfold=fold,nrepeat=3,fixedfolds = F) #Create (repeated) CV-splits of the data
       lambda1groupfit <- optLambdasWrap(penaltiesinit=lambda, 
@@ -636,6 +671,25 @@ squeezy <- function(Y,X,grouping,alpha=1,model=NULL,
                               intercept = intrcpt, standardize = F,
                               penalty.factor=penfctr2[not0], thresh=10^-10)
         sopt <- glmGR.cv$lambda.min
+        
+        #if 0 model returned, first try to rerun CV
+        tempItr <- 1
+        while(glmGR.cv$lambda.min==glmGR.cv$lambda[1] & tempItr<=10){
+          glmGR.cv <- cv.glmnet(X[,not0],Y,alpha=alphat,family=fml,
+                                intercept = intrcpt, standardize = F,
+                                penalty.factor=penfctr2[not0], thresh=10^-10)
+          sopt <- glmGR.cv$lambda.min
+          tempItr <- tempItr+1
+        }
+        # #if still 0 model returned (for first lambda in the sequence as run by glmnet), 
+        # #take smaller lambda with cvm within 1 se
+        # if(glmGR.cv$lambda.min==glmGR.cv$lambda[1]){
+        #   warning("Recalibrated global lambda returns intercept-only model. 
+        #           Model for smaller global lambda is returned")
+        #   #se <- sd(glmGR.cv$cvm) 
+        #   se <- abs(glmGR.cv$cvm[1]-rev(glmGR.cv$cvm)[1])/100
+        #   sopt <- min(glmGR.cv$lambda[glmGR.cv$cvm <= (glmGR.cv$lambda + se)])
+        # }
       } else sopt <- lambdaEN/n*sd_y
       
       temp <- coef(glmGR,s=sopt,exact=T,x=X[,not0],y=Y,alpha=alphat,
