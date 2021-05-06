@@ -1583,6 +1583,16 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   return(list(Hmat=Hmat,MW=MW,KW=KW))
 }
 
+#Computation of weighted Hat matrix, penalized variables only; needed in IWLS functions
+.Hpen <- function(WV,XXT){ #WV:weigths as vector (n); XXT: (penalized) sample cross-product (nxn)
+  n <-length(WV)
+  Winv <- diag(1/WV)
+  inv <- solve(Winv + XXT)
+  Mmat <- diag(n) - inv %*% XXT
+  Hmat <- XXT %*% Mmat
+  return(list(Hmat=Hmat,Mmat=Mmat))
+}
+
 #Produce balanced folds----
 .produceFolds <- function(nsam,outerfold,response,model="logistic",balance=TRUE,fixedfolds=F){
   if(fixedfolds) set.seed(3648310) #else set.seed(NULL)
