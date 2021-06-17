@@ -230,7 +230,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
       }
     )
     
-    #plot(log(lambdaseq),ML)
+    
     if(all(is.nan(ML))) stop("Error in estimating global lambda, try standardising data")
     lambdaseq <- lambdaseq[!is.nan(ML)&(ML!=Inf)]
     ML <- ML[!is.nan(ML)&(ML!=Inf)]
@@ -249,7 +249,6 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
         lambda <- min(lambdaseq[ML<=(min(ML)+se)])
       }
     } 
-    
   }else{
     lambda <- lambdaglobal
   }
@@ -586,64 +585,70 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   
   #Transform penalties and compute elastic net betas with glmnet
   if(alpha <= 1){
-    varFunc <- function(lam,alpha=0.5,tausq){
-      t1 <- - alpha/(1-alpha)^(3/2)/sqrt(lam)*
-        exp(dnorm(alpha*sqrt(lam)/sqrt(1-alpha),log=T) -
-              pnorm(-alpha*sqrt(lam)/sqrt(1-alpha),log.p=T))
-      varBeta <- 1/lam/(1-alpha) + alpha^2/(1-alpha)^2 + t1
-      f <- varBeta - tausq
+    varFunc <- function(tauEN,alpha=0.5,tauR){
+      #tauR: ridge prior variance
+      #tauEN: elastic net prior variance (equals sigma^2/lambda_{EN})
+      #alpha: fixed elastic net mixing parameter
+      #return variance of elastic net prior minus the ridge variance tauR;
+      #p(\beta)\propto exp(-1/(2*tauEN)*(alpha*|\beta|+(1-\alpha)\beta^2))
+      
+      t2 <- - alpha/2/(1-alpha)^(3/2)*sqrt(tauEN)*
+        exp(dnorm(alpha/2/sqrt(tauEN)/sqrt(1-alpha),log=T) -
+              pnorm(-alpha/2/sqrt(tauEN)/sqrt(1-alpha),log.p=T))
+      varBeta <- tauEN/(1-alpha) + alpha^2/4/(1-alpha)^2 + t2
+      f <- varBeta - tauR
       return(f)
     }
-    lamEN <- function(alpha,tausq){
+    lamEN <- function(alpha,tauR){
       if(alpha==0){
-        lamEN <- 1/tausq
+        lamEN <- sigmahat/tauR
       }else if(alpha==1){
-        lamEN <- sqrt(2/tausq)
-      }else if(tausq>10^6){
-        lamEN <- 1/tausq
+        lamEN <- sigmahat*sqrt(8/tauR)
+      }else if(tauR/sigmahat>10^6){
+        lamEN <- sigmahat/tauR
         if(alpha>0.2){
-          lb2 <- 10^-6
-          ub2 <- sqrt(2/10^6)
-          temp <- try(uniroot(varFunc,c(0.9*lb2,1.1*ub2),alpha=alpha,tausq=10^6,tol=10^-6))
+          ub2 <- 10^6*sigmahat
+          lb2 <- sqrt(10^6*sigmahat/8)
+          temp <- try(uniroot(varFunc,c(0.9*lb2,1.1*ub2),alpha=alpha,tauR=10^6*sigmahat,tol=10^-6))
           if(class(temp)[1]!="try-error"){
-            if(temp$root<lamEN) lamEN <- temp$root
+            if(temp$root<lamEN) lamEN <- sigmahat/temp$root
           }
         }
-      }else if(tausq<10^-6){
-        lamEN <- sqrt(2/tausq)
+      }else if(tauR/sigmahat<10^-6){
+        lamEN <- sigmahat*sqrt(8/tauR)
         if(alpha<0.8){
-          lb2 <- sqrt(2/10^-7)
-          ub2 <- 10^7
-          temp <- try(uniroot(varFunc,c(0.9*lb2,1.1*ub2),alpha=alpha,tausq=10^-7,tol=10^-6))
+          ub2 <- sqrt(10^-7*sigmahat/8)
+          lb2 <- 10^-7*sigmahat
+          temp <- try(uniroot(varFunc,c(0.9*lb2,1.1*ub2),alpha=alpha,tauR=10^-7*sigmahat,tol=10^-6))
           if(class(temp)[1]!="try-error"){
             if(temp$root>lamEN) lamEN <- temp$root
           }
         }
       }else{
-        lb <- min(1/tausq,sqrt(2/tausq))
-        ub <- max(1/tausq,sqrt(2/tausq))
-        #if(sign(varFunc(0.9*lb,alpha=alpha,tausq=tausq))==sign(varFunc(1.1*ub,alpha=alpha,tausq=tausq))) browser()
-        temp <- try(uniroot(varFunc,c(0.9*lb,1.1*ub),alpha=alpha,tausq=tausq,tol=10^-6))
+        lb <- min(tauR,sqrt(tauR/8))
+        ub <- max(tauR,sqrt(tauR/8))
+        #if(sign(varFunc(0.9*lb,alpha=alpha,tauR=tauR))==sign(varFunc(1.1*ub,alpha=alpha,tauR=tauR))) browser()
+        temp <- try(uniroot(varFunc,c(0.9*lb,1.1*ub),alpha=alpha,tauR=tauR,tol=10^-6))
         if(class(temp)[1]=="try-error"){
-          if(tausq<0.5) lamEN <- sqrt(2/tausq)
-          if(tausq>0.5) lamEN <- 1/tausq
+          if(tauR<0.5) lamEN <- sigmahat*sqrt(8/tauR)
+          if(tauR>0.5) lamEN <- sigmahat/tauR
         }else{
-          lamEN <- temp$root
+          lamEN <- sigmahat/temp$root
         }
       }
       return(lamEN)
     }
-    alphat <- 1/(1+sd_y*(1-alpha)/alpha)
-    lambdasEN <- sapply(sigmahat/lambdas,function(tau) lamEN(tausq = tau,alpha=alpha))
-    tauEN <- 1/lambdasEN
-    lambdasENhat <- lambdasEN*sigmahat*((1-alpha)+ alpha/sd_y)
+    alphat <- 1/(1+2*sd_y*(1-alpha)/alpha) #alpha used in glmnet
+    lambdasEN <- sapply(sigmahat/lambdas,function(tau) lamEN(tauR = tau,alpha=alpha))
+    tauEN <- sigmahat/lambdasEN
+    lambdasENhat <- lambdasEN/2*(alpha/sd_y+ 2*(1-alpha))
     
     uniqueTaus <- unique(as.vector(c(sigmahat/lambdas)%*%Zt))
     if(dim(X)[2]==dim(Xxtnd)[2]){
       lambdap<- (as.vector(lambdasENhat%*%Zt)) 
     }else{ #some groups are overlapping
-      lambdasENunique <- sapply(uniqueTaus,function(tau) lamEN(tausq = tau,alpha=alpha))
-      lambdasENuniquehat <- lambdasENunique*sigmahat*((1-alpha)+ alpha/sd_y)
+      lambdasENunique <- sapply(uniqueTaus,function(tau) lamEN(tauR = tau,alpha=alpha))
+      lambdasENuniquehat <- lambdasENunique/2*(alpha/sd_y+ 2*(1-alpha))
       indUnique <- sapply(as.vector(c(sigmahat/lambdas)%*%Zt),function(x)which(uniqueTaus==x))
       lambdap <- lambdasENuniquehat[indUnique]
     }
@@ -699,51 +704,6 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
       #plot(beta)
       #print(lambdaEN/n*sd_y)
     }
-    
-  # }else if(alpha==1){ #Compute lasso estimate directly
-  #   tauEN <-  sqrt(sigmahat/2/lambdas) #Laplace prior parameter estimates
-  #   lambdasEN <- sqrt(sigmahat)/sd_y * sqrt(2*lambdas) #=1/tauL*sigmahat/sd_y #note not same notation as above
-  #   lambdap<- lambda/(as.vector(gamma%*%Zt)) #=sigmahat/(tauglobal*as.vector(gamma%*%Zt)) #specific ridge penalty for beta_k
-  #   lambdap[lambdap<0]<-Inf
-  #   
-  #   penfctr2 <- penfctr
-  #   penfctr2[pen] <- sqrt(sigmahat)/sd_y * sqrt(2*lambdap[pen]) 
-  #   not0 <- which(penfctr2!=Inf)
-  #   lambda1 <- sum(penfctr2[not0])/length(penfctr2[not0])
-  #   penfctr2 <- penfctr2/lambda1
-  #   if(model=="cox"){
-  #     glmGR <- glmnet(X[,not0],Y,alpha=1,family=fml,standardize = F,
-  #                     penalty.factor=penfctr2[not0], thresh=10^-10)
-  #   }else{
-  #     glmGR <- glmnet(X[,not0],Y,alpha=1,family=fml,
-  #                     intercept = intrcpt, standardize = F,
-  #                     penalty.factor=penfctr2[not0], thresh=10^-10)
-  #   }
-  #   
-  #   if(reCV){
-  #     glmGR.cv <- cv.glmnet(X[,not0],Y,alpha=1,family=fml,
-  #                           intercept = intrcpt, standardize = F,
-  #                           penalty.factor=penfctr2[not0], thresh=10^-10)
-  #     sopt <- glmGR.cv$lambda.min
-  #   } else sopt <- lambda1/n*sd_y
-  #   
-  #   temp <- coef(glmGR,s=sopt,exact=T,x=X[,not0],y=Y,
-  #                penalty.factor=penfctr2[not0],family=fml,intercept=intrcpt) 
-  #   beta <- rep(0,p); beta[not0] <- temp[-1]
-  #   a0 <- temp[1]
-  #   #plot(beta)
-  #   #print(lambda1/n*sd_y)
-  #   
-  #   # browser()
-  #   # #or with penalized:
-  #   # penfctr2 <- penfctr
-  #   # penfctr2[pen] <- sqrt(sigmahat)/sd_y * sqrt(2*lambdap[pen])
-  #   # penLasso <- penalized(penalized=X[,not0],response=Y/sd_y,model=model,
-  #   #                       lambda1 = penfctr2,
-  #   #                       standardize = F)
-  #   # betaPEN <- rep(0,p); betaPEN[not0] <- penLasso@penalized*sd_y
-  #   # a0PEN <- penLasso@unpenalized
-  #   # plot(betaPEN,beta); abline(0,1)
   }else{stop("alpha should be between 0 and 1")}
   
   if(standardise_Y){
@@ -991,7 +951,9 @@ dminML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
     stop(print(paste("Only model type linear and logistic supported")))
   }
   
-  Hpen <- Lam0inv - Lam0inv %*% solve(solve(W)+Lam0inv, Lam0inv)
+  #Hpen <- Lam0inv - Lam0inv %*% solve(solve(W)+Lam0inv, Lam0inv)
+  Hpen <- Lam0inv - Lam0inv %*% solve(diag(1,n)+W%*%Lam0inv, W%*%Lam0inv)
+  
   if(!is.null(Xunpen)){
     WP1W <- diag(rep(1,n)) - Xunpen%*%solve(t(Xunpen)%*%W%*%Xunpen,t(Xunpen)%*%W)
   }else{
