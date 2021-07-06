@@ -1,13 +1,14 @@
+#main function: fit group-adaptive elastic net linear or logistic model
 squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
-                      X2=NULL,Y2=NULL,unpen=NULL,intrcpt=T,
+                      X2=NULL,Y2=NULL,unpen=NULL,intrcpt=TRUE,
                       method=c("ecpcEN","MML","MML.noDeriv","CV"),
-                      fold=10,compareMR = T,selectAIC=F,
+                      fold=10,compareMR = TRUE,selectAIC=FALSE,
                       fit.ecpc=NULL,
                       lambdas=NULL,lambdaglobal=NULL,
                       lambdasinit=NULL,sigmasq=NULL,
-                      ecpcinit=T,SANN=F,minlam=10^-3,
+                      ecpcinit=TRUE,SANN=FALSE,minlam=10^-3,
                       standardise_Y=NULL,reCV=NULL,opt.sigma=NULL,
-                      resultsAICboth=F){
+                      resultsAICboth=FALSE,silent=FALSE){
   #Y: response
   #X: observed data
   #groupset: list with index of covariates of co-data groups
@@ -19,8 +20,8 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   #fold: number of folds used in global lambda cross-validation
   #sigmasq: (linear regression) noise level
   #method: "CV","MML.noDeriv", or "MML"
-  #compareMR: T/F to return betas for multiridge estimate, and predictions for Y2 if X2 is given
-  #selectAIC: T/F to compare AIC of multiridge model and ordinary ridge model. Return best one.
+  #compareMR: TRUE/FALSE to return betas for multiridge estimate, and predictions for Y2 if X2 is given
+  #selectAIC: TRUE/FALSE to compare AIC of multiridge model and ordinary ridge model. Return best one.
   
   #Set-up variables ---------------------------------------------------------------------------
   groupsets <- list(groupset)
@@ -49,9 +50,9 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
            if(is.null(lambdas)) lambdas <- fit.ecpc$sigmahat/(fit.ecpc$gamma*fit.ecpc$tauglobal)
            if(is.null(lambdaglobal)) lambdaglobal <- fit.ecpc$sigmahat/fit.ecpc$tauglobal
            if(is.null(sigmasq)) sigmasq <- fit.ecpc$sigmahat
-           if(is.null(standardise_Y)) standardise_Y <- T
-           if(is.null(reCV)) reCV <- T
-           if(is.null(opt.sigma)) opt.sigma <- F
+           if(is.null(standardise_Y)) standardise_Y <- TRUE
+           if(is.null(reCV)) reCV <- TRUE
+           if(is.null(opt.sigma)) opt.sigma <- FALSE
          },
          "MML"={
            if(!is.null(fit.ecpc)){
@@ -59,10 +60,10 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
              if(is.null(lambdaglobal)) lambdaglobal <- fit.ecpc$sigmahat/fit.ecpc$tauglobal
              if(is.null(sigmasq)) sigmasq <- fit.ecpc$sigmahat
            } 
-           if(is.null(standardise_Y)) standardise_Y <- F
-           if(is.null(opt.sigma)) opt.sigma <- T
+           if(is.null(standardise_Y)) standardise_Y <- FALSE
+           if(is.null(opt.sigma)) opt.sigma <- TRUE
            if(is.null(reCV)){
-             reCV <- F; if(model!="linear" | !opt.sigma) reCV <- T
+             reCV <- FALSE; if(model!="linear" | !opt.sigma) reCV <- TRUE
            } 
            
          },
@@ -72,10 +73,10 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
              if(is.null(lambdaglobal)) lambdaglobal <- fit.ecpc$sigmahat/fit.ecpc$tauglobal
              if(is.null(sigmasq)) sigmasq <- fit.ecpc$sigmahat
            } 
-           if(is.null(standardise_Y)) standardise_Y <- F
-           if(is.null(opt.sigma)) opt.sigma <- T
+           if(is.null(standardise_Y)) standardise_Y <- FALSE
+           if(is.null(opt.sigma)) opt.sigma <- TRUE
            if(is.null(reCV)){
-             reCV <- F; if(!opt.sigma) reCV <- T
+             reCV <- FALSE; if(!opt.sigma) reCV <- TRUE
            } 
          },
          "CV"={
@@ -84,9 +85,9 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
              if(is.null(lambdaglobal)) lambdaglobal <- fit.ecpc$sigmahat/fit.ecpc$tauglobal
              if(is.null(sigmasq)) sigmasq <- fit.ecpc$sigmahat
            } 
-           if(is.null(standardise_Y)) standardise_Y <- F
-           if(is.null(opt.sigma)) opt.sigma <- F
-           if(is.null(reCV)) reCV <- T
+           if(is.null(standardise_Y)) standardise_Y <- FALSE
+           if(is.null(opt.sigma)) opt.sigma <- FALSE
+           if(is.null(reCV)) reCV <- TRUE
          }
   )
   
@@ -105,8 +106,8 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
          },
          'logistic'={
            fml <- 'binomial'
-           opt.sigma <- F
-           standardise_Y <- F
+           opt.sigma <- FALSE
+           standardise_Y <- FALSE
            sd_y <- 1 #do not standardise y in logistic setting
            sd_y_former <- sd_y
            
@@ -127,11 +128,11 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
          },
          'cox'={
            fml <- 'cox'
-           opt.sigma <- F
-           standardise_Y <- F
+           opt.sigma <- FALSE
+           standardise_Y <- FALSE
            sd_y <- 1 #do not standardise y in cox regression setting
            sd_y_former <- sd_y
-           intrcpt <- F #Cox does not use intercept
+           intrcpt <- FALSE #Cox does not use intercept
          }
   )
   # check whether unpenalised covariates are not in partition
@@ -165,7 +166,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   Kg <- lapply(groupsets,function(x)(sapply(x,length))) #m-list with G_i vector of group sizes in partition i
   #ind1<-ind
   
-  #ind <- (matrix(1,G,1)%*%ind)==(1:G)#sparse matrix with ij element T if jth element in group i, otherwise F
+  #ind <- (matrix(1,G,1)%*%ind)==(1:G)#sparse matrix with ij element TRUE if jth element in group i, otherwise FALSE
   i<-unlist(sapply(1:sum(G),function(x){rep(x,unlist(Kg)[x])}))
   j<-unlist(unlist(groupsets))
   ind <- sparseMatrix(i,j,x=1) #sparse matrix with ij element 1 if jth element in group i (global index), otherwise 0
@@ -214,7 +215,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   #Find global lambda if not given for initial penalty and/or for AIC comparison----
   if(is.null(lambdaglobal)){
     #find rough estimate of initial global lambda
-    # cvperblock <- fastCV2(list(Xxtnd),Y=Y,kfold=fold,fixedfolds = F,X1=Xunpen,intercept=intrcpt)
+    # cvperblock <- fastCV2(list(Xxtnd),Y=Y,kfold=fold,fixedfolds = FALSE,X1=Xunpen,intercept=intrcpt)
     # lambda <- cvperblock$lambdas
     # lambda[lambda==Inf] <- 10^6
     
@@ -223,7 +224,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
     ML <- sapply(log(lambdaseq),function(lam){
       temp <- try(minML.LA.ridgeGLM(loglambdas = lam,XXblocks = XXbl1,sigmasq=sd_y^2,
                                     Y=Y,Xunpen=Xunpen,intrcpt = intrcpt,model=model),
-                  silent=T)
+                  silent=TRUE)
       if(class(temp)[1]!="try-error"){
         return(temp)
       }else return(NaN)
@@ -256,7 +257,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   #Further optimise global lambda with same method as multi-group for AIC comparison
   if(selectAIC | compareMR){
     if(method=="CV"){
-      leftout <- CVfolds(Y=Y,kfold=fold,nrepeat=3,fixedfolds = F) #Create (repeated) CV-splits of the data
+      leftout <- CVfolds(Y=Y,kfold=fold,nrepeat=3,fixedfolds = FALSE) #Create (repeated) CV-splits of the data
       lambda1groupfit <- optLambdasWrap(penaltiesinit=lambda, 
                                      XXblocks=list(apply(simplify2array(XXbl),c(1,2),sum)),
                                      Y=Y,folds=leftout,
@@ -268,7 +269,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
       lambda1groupfit <- optLambdas_mgcv(penaltiesinit=lambda,Y=Y,
                                          XXblocks=list(apply(simplify2array(XXbl),c(1,2),sum)),
                                          model=model,reltol=1e-3,
-                                         maxItropt=500,tracescore=F,fixedseed =F,
+                                         maxItropt=500,tracescore=FALSE,fixedseed =FALSE,
                                          optmethod = "Nelder-Mead",
                                          sigmasq=sigmasq) #TD: intercept?
       lambda <- lambda1groupfit$optpen
@@ -334,11 +335,11 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
     
     #Find joint lambdas:
     if(method=="CV"){
-      leftout <- CVfolds(Y=Y,kfold=fold,nrepeat=3,fixedfolds = F) #Create (repeated) CV-splits of the data
+      leftout <- CVfolds(Y=Y,kfold=fold,nrepeat=3,fixedfolds = FALSE) #Create (repeated) CV-splits of the data
       jointlambdas <- optLambdasWrap(penaltiesinit=lambdasinit, XXblocks=XXbl,Y=Y,folds=leftout,
                                      X1=Xunpen,intercept=intrcpt,
                                      score=ifelse(model == "linear", "mse", "loglik"),model=model,
-                                     maxItropt2 = 500,reltol = 10^-3,traceCV=F)
+                                     maxItropt2 = 500,reltol = 10^-3,traceCV=FALSE)
       lambdas <- jointlambdas$optpen
     }else if(method=="MML.noDeriv"){
       #browser()
@@ -346,13 +347,13 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
         if(SANN){
           jointlambdas <- optLambdas_mgcvWrap(penaltiesinit=lambdasinit, XXblocks=XXbl,Y=Y,
                                               model=model,reltol=1e-4,
-                                              maxItropt2=1000,tracescore=F,fixedseed =F,
+                                              maxItropt2=1000,tracescore=FALSE,fixedseed =FALSE,
                                               optmethod2 = "Nelder-Mead",
                                               sigmasq=sigmahat,opt.sigma=opt.sigma) #TD: intercept?
         }else{
           jointlambdas <- optLambdas_mgcv(penaltiesinit=lambdasinit, XXblocks=XXbl,Y=Y,
                                           model=model,reltol=1e-4,
-                                          maxItropt=1000,tracescore=F,fixedseed =F,
+                                          maxItropt=1000,tracescore=FALSE,fixedseed =FALSE,
                                           optmethod = "Nelder-Mead",
                                           sigmasq=sigmahat,opt.sigma=opt.sigma) #TD: intercept?
         }
@@ -361,13 +362,13 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
         if(SANN){
           jointlambdas <- optLambdas_mgcvWrap(penaltiesinit=rep(lambda,G), XXblocks=XXbl,Y=Y,
                                               model=model,reltol=1e-4,
-                                              maxItropt2=1000,tracescore=F,fixedseed =F,
+                                              maxItropt2=1000,tracescore=FALSE,fixedseed =FALSE,
                                               optmethod2 = "Nelder-Mead",
                                               sigmasq=sigmahat,opt.sigma=opt.sigma) #TD: intercept?
         }else{
           jointlambdas <- optLambdas_mgcv(penaltiesinit=rep(lambda,G), XXblocks=XXbl,Y=Y,
                                           model=model,reltol=1e-4,
-                                          maxItropt=1000,tracescore=F,fixedseed =F,
+                                          maxItropt=1000,tracescore=FALSE,fixedseed =FALSE,
                                           optmethod = "Nelder-Mead",
                                           sigmasq=sigmahat,opt.sigma=opt.sigma) #TD: intercept?
         }
@@ -400,10 +401,10 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
         sigmasq <- exp(jointlambdas$par[1])+minlam
         lambdas <- exp(jointlambdas$par[-1])+minlam
         
-        # MLinit <- minML.LA.ridgeGLM(loglambdas=c(log(sigmahat),log(lambdasinit)),opt.sigma = T,
+        # MLinit <- minML.LA.ridgeGLM(loglambdas=c(log(sigmahat),log(lambdasinit)),opt.sigma = TRUE,
         #                             XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
         # MLfinal <- minML.LA.ridgeGLM(loglambdas=c(log(sigmasq),log(lambdas)),
-        #                              opt.sigma = T,
+        #                              opt.sigma = TRUE,
         #                              XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
         
       }else{
@@ -413,11 +414,11 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
                               intrcpt=intrcpt, Xunpen=Xunpen)
         lambdas <- exp(jointlambdas$par)+minlam
         
-        # MLinit <- minML.LA.ridgeGLM(loglambdas=c(log(lambdasinit)),opt.sigma = F,
+        # MLinit <- minML.LA.ridgeGLM(loglambdas=c(log(lambdasinit)),opt.sigma = FALSE,
         #                             sigmasq=sigmahat,
         #                             XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
         # MLfinal <- minML.LA.ridgeGLM(loglambdas=c(log(lambdas)),
-        #                              opt.sigma = F,sigmasq=sigmasq,
+        #                              opt.sigma = FALSE,sigmasq=sigmasq,
         #                              XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
       }
         
@@ -448,10 +449,10 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
     }
   }
   
-  MLinit <- minML.LA.ridgeGLM(loglambdas=log(lambdasinit),opt.sigma = F,sigmasq=sigmahat,
+  MLinit <- minML.LA.ridgeGLM(loglambdas=log(lambdasinit),opt.sigma = FALSE,sigmasq=sigmahat,
                               XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
   MLfinal <- minML.LA.ridgeGLM(loglambdas=log(lambdas),
-                               opt.sigma = F, sigmasq=sigmahat,
+                               opt.sigma = FALSE, sigmasq=sigmahat,
                                XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
   # print("-log(ML) for initial penalties"); print(MLinit)
   # print("-log(ML) for final penalties"); print(MLfinal)
@@ -461,21 +462,21 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
     # res1group <- squeezy(Y=Y,X=X,groupset=list(1:p),alpha=0,model=model,
     #                        unpen=unpen,intrcpt=intrcpt,
     #                        fold=fold,sigmasq=sigmasq,method=method,
-    #                        compareMR = F,selectAIC=F)
+    #                        compareMR = FALSE,selectAIC=FALSE)
     # 
     # lambda1group <- res1group$lambdaMR
     # sigmahat1group <- res1group$sigmahat
     lambda1group <- lambda
     if(sum((1:p)%in%unpen)>0){
-      AIC1group <- AIC.LA.ridgeGLM(log(lambda1group),XXblocks=list(apply(simplify2array(XXbl),c(1,2),sum)),
+      AIC1group <- mAIC.LA.ridgeGLM(log(lambda1group),XXblocks=list(apply(simplify2array(XXbl),c(1,2),sum)),
                                    Y=Y,sigmasq=sigmahat1group,Xunpen=Xunpen,intrcpt=intrcpt,model=model)
-      AICmultigroup <- AIC.LA.ridgeGLM(log(lambdas),XXblocks=XXbl,
+      AICmultigroup <- mAIC.LA.ridgeGLM(log(lambdas),XXblocks=XXbl,
                                        Y=Y,sigmasq=sigmahat,Xunpen=Xunpen,intrcpt=intrcpt,model=model)
     }else{
-      AIC1group <- AIC.LA.ridgeGLM(log(lambda1group),
+      AIC1group <- mAIC.LA.ridgeGLM(log(lambda1group),
                                    XXblocks=list(apply(simplify2array(XXbl),c(1,2),sum)),
                                    Y=Y,sigmasq=sigmahat1group,intrcpt=intrcpt,model=model)
-      AICmultigroup <- AIC.LA.ridgeGLM(log(lambdas),XXblocks=XXbl,
+      AICmultigroup <- mAIC.LA.ridgeGLM(log(lambdas),XXblocks=XXbl,
                                        Y=Y,sigmasq=sigmahat,intrcpt=intrcpt,model=model)
     }
     #If model with only one group has lower AIC, select that model
@@ -499,6 +500,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   
   
   #Compute regression model----
+  glmGR <- NA
   if(compareMR||alpha==0){
     #Compute ridge betas with multiridge
     XXT <- SigmaFromBlocks(XXbl,penalties=lambdas) #create nxn Sigma matrix = sum_b [lambda_b)^{-1} X_b %*% t(X_b)]
@@ -537,17 +539,17 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   #                                                  x=c(1/sqrt(penfctr2[pen]))))
   # if(model=="cox"){
   #   glmGR <- glmnet(Xacc[,not0],Y,alpha=0,#lambda = lambdaoverall/n*sd_y,
-  #                   family=fml,standardize = F,
+  #                   family=fml,standardize = FALSE,
   #                   penalty.factor=penfctr[not0], thresh=10^-10)
-  #   temp <- coef(glmGR,s=lambdaoverall/n*sd_y,exact=T,x=Xacc[,not0],y=Y,
+  #   temp <- coef(glmGR,s=lambdaoverall/n*sd_y,exact=TRUE,x=Xacc[,not0],y=Y,
   #                penalty.factor=penfctr[not0],family=fml,
   #                thresh=10^-10)
   # }else{
   #   glmGR <- glmnet(Xacc[,not0],Y,alpha=0,#lambda = lambdaoverall/n*sd_y,
-  #                   family=fml, intercept = intrcpt, standardize = F,
+  #                   family=fml, intercept = intrcpt, standardize = FALSE,
   #                   penalty.factor=penfctr[not0], thresh=10^-10)
   #   #betaGLM <- rep(0,p); betaGLM[not0] <- as.vector(glmGR$beta) 
-  #   temp <- coef(glmGR,s=lambdaoverall/n*sd_y,exact=T,x=Xacc[,not0],y=Y,
+  #   temp <- coef(glmGR,s=lambdaoverall/n*sd_y,exact=TRUE,x=Xacc[,not0],y=Y,
   #                penalty.factor=penfctr[not0],family=fml,
   #                intercept=intrcpt, thresh=10^-10)
   # }
@@ -564,18 +566,18 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   # lambdaoverall <- sum(penfctr2[not0])/length(penfctr2[not0]) #global penalty parameter
   # penfctr2 <- penfctr2/lambdaoverall #scale penalty factor such that sums to p
   # if(model=="cox"){
-  #   glmGR <- glmnet(X[,not0],Y,alpha=0,family=fml,standardize = F,
+  #   glmGR <- glmnet(X[,not0],Y,alpha=0,family=fml,standardize = FALSE,
   #                   penalty.factor=penfctr2[not0], thresh=10^-10)
-  #   temp <- coef(glmGR,s=lambdaoverall/n*sd_y,exact=T,x=X[,not0],y=Y,
+  #   temp <- coef(glmGR,s=lambdaoverall/n*sd_y,exact=TRUE,x=X[,not0],y=Y,
   #                penalty.factor=penfctr2[not0],family=fml,
   #                thresh=10^-10)
   # }else{
   #   glmGR <- glmnet(X[,not0],Y,alpha=0,family=fml,#lambda=lambdaoverall/n*sd_y,
-  #                   intercept = intrcpt, standardize = F,
+  #                   intercept = intrcpt, standardize = FALSE,
   #                   penalty.factor=penfctr2[not0], thresh=10^-10)
   #   #betaGLM2 <- rep(0,p); betaGLM2[not0] <- as.vector(glmGR$beta)
   #   
-  #   temp <- coef(glmGR,s=lambdaoverall/n*sd_y,exact=T,x=X[,not0],y=Y,
+  #   temp <- coef(glmGR,s=lambdaoverall/n*sd_y,exact=TRUE,x=X[,not0],y=Y,
   #                penalty.factor=penfctr2[not0],family=fml,
   #                intercept=intrcpt, thresh=10^-12)
   # }
@@ -585,16 +587,16 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   
   #Transform penalties and compute elastic net betas with glmnet
   if(alpha <= 1){
-    varFunc <- function(tauEN,alpha=0.5,tauR){
-      #tauR: ridge prior variance
+    varFunc <- function(tauEN,alpha=alpha,tauR){
+      #tauR: ridge prior variance (equals sigma^2/lambda_R)
       #tauEN: elastic net prior variance (equals sigma^2/lambda_{EN})
       #alpha: fixed elastic net mixing parameter
       #return variance of elastic net prior minus the ridge variance tauR;
       #p(\beta)\propto exp(-1/(2*tauEN)*(alpha*|\beta|+(1-\alpha)\beta^2))
       
       t2 <- - alpha/2/(1-alpha)^(3/2)*sqrt(tauEN)*
-        exp(dnorm(alpha/2/sqrt(tauEN)/sqrt(1-alpha),log=T) -
-              pnorm(-alpha/2/sqrt(tauEN)/sqrt(1-alpha),log.p=T))
+        exp(dnorm(alpha/2/sqrt(tauEN)/sqrt(1-alpha),log=TRUE) -
+              pnorm(-alpha/2/sqrt(tauEN)/sqrt(1-alpha),log.p=TRUE))
       varBeta <- tauEN/(1-alpha) + alpha^2/4/(1-alpha)^2 + t2
       f <- varBeta - tauR
       return(f)
@@ -645,17 +647,20 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
     
     uniqueTaus <- unique(as.vector(c(sigmahat/lambdas)%*%Zt))
     if(dim(X)[2]==dim(Xxtnd)[2]){
-      lambdap<- (as.vector(lambdasENhat%*%Zt)) 
+      lambdap<- (as.vector(lambdasENhat%*%Zt))
+      lambdapApprox<- (as.vector(lambdasEN%*%Zt))
     }else{ #some groups are overlapping
       lambdasENunique <- sapply(uniqueTaus,function(tau) lamEN(tauR = tau,alpha=alpha))
       lambdasENuniquehat <- lambdasENunique/2*(alpha/sd_y+ 2*(1-alpha))
       indUnique <- sapply(as.vector(c(sigmahat/lambdas)%*%Zt),function(x)which(uniqueTaus==x))
       lambdap <- lambdasENuniquehat[indUnique]
+      lambdapApprox <- lambdasENunique[indUnique]
     }
     
     if(alpha==0){
       beta <- betaMR
       a0 <- a0MR
+      lambdaMR_reCV <- lambdas
     }else{
       penfctr2 <- penfctr
       penfctr2[pen] <- lambdap[pen] 
@@ -663,17 +668,17 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
       lambdaEN <- sum(penfctr2[not0])/length(penfctr2[not0])
       penfctr2 <- penfctr2/lambdaEN
       if(model=="cox"){
-        glmGR <- glmnet(X[,not0],Y,alpha=alphat,family=fml,standardize = F,
+        glmGR <- glmnet(X[,not0],Y,alpha=alphat,family=fml,standardize = FALSE,
                         penalty.factor=penfctr2[not0], thresh=10^-10)
       }else{
         glmGR <- glmnet(X[,not0],Y,alpha=alphat,family=fml,
-                        intercept = intrcpt, standardize = F,
+                        intercept = intrcpt, standardize = FALSE,
                         penalty.factor=penfctr2[not0], thresh=10^-10)
       }
       
       if(reCV){
         glmGR.cv <- cv.glmnet(X[,not0],Y,alpha=alphat,family=fml,
-                              intercept = intrcpt, standardize = F,
+                              intercept = intrcpt, standardize = FALSE,
                               penalty.factor=penfctr2[not0], thresh=10^-10)
         sopt <- glmGR.cv$lambda.min
         
@@ -681,7 +686,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
         tempItr <- 1
         while(glmGR.cv$lambda.min==glmGR.cv$lambda[1] & tempItr<=10){
           glmGR.cv <- cv.glmnet(X[,not0],Y,alpha=alphat,family=fml,
-                                intercept = intrcpt, standardize = F,
+                                intercept = intrcpt, standardize = FALSE,
                                 penalty.factor=penfctr2[not0], thresh=10^-10)
           sopt <- glmGR.cv$lambda.min
           tempItr <- tempItr+1
@@ -694,10 +699,17 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
         #   #se <- sd(glmGR.cv$cvm) 
         #   se <- abs(glmGR.cv$cvm[1]-rev(glmGR.cv$cvm)[1])/100
         #   sopt <- min(glmGR.cv$lambda[glmGR.cv$cvm <= (glmGR.cv$lambda + se)])
-        # }
-      } else sopt <- lambdaEN/n*sd_y
+        # },
+        
+        lambdasEN_reCV <- sopt/lambdaEN*n/sd_y * lambdasEN
+        lambdaMR_reCV <- sigmahat/sapply(sigmahat/lambdasEN_reCV,varFunc,alpha=alpha,tauR=0)
+        
+      } else{
+        sopt <- lambdaEN/n*sd_y
+        lambdaMR_reCV <- lambdas
+      } 
       
-      temp <- coef(glmGR,s=sopt,exact=T,x=X[,not0],y=Y,alpha=alphat,
+      temp <- coef(glmGR,s=sopt,exact=TRUE,x=X[,not0],y=Y,alpha=alphat,
                    penalty.factor=penfctr2[not0],family=fml,intercept=intrcpt) 
       beta <- rep(0,p); beta[not0] <- temp[-1]
       a0 <- temp[1]
@@ -764,12 +776,16 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
                  a0Approx = a0,
                  #tauApprox = tauEN, #prior parameter estimates
                  lambdaApprox = lambdasEN, #elastic net group penalty
+                 lambdapApprox = lambdapApprox, #p-dimensional vector with EN penalties
                  tauMR = sigmahat/lambdas, #prior parameter estimates
                  lambdaMR = lambdas,
                  lambdaglobal = lambda,
                  sigmahat = sigmahat,
                  MLinit=MLinit,
-                 MLfinal=MLfinal)
+                 MLfinal=MLfinal,
+                 alpha=alpha,#elastic net parameter alpha value used
+                 glmnet.fit = glmGR, #glmnet fit for the coefficients 
+                 lambdaMR_reCV=lambdaMR_reCV) 
                  #betaMR2 = betaGLM, #multiridge penalty with glmnet
                  #a0MR2 = a0GLM)
   if(compareMR){
@@ -805,20 +821,20 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
         output$AICmodels$onegroup$fit <- squeezy(Y,X,groupset,alpha=alpha,model=model,
                 X2=X2,Y2=Y2,unpen=unpen,intrcpt=intrcpt,
                 method="MML",fold=fold,
-                compareMR = compareMR,selectAIC=F,
+                compareMR = compareMR,selectAIC=FALSE,
                 fit.ecpc=NULL,
                 lambdas=rep(lambda1group,G),lambdaglobal=lambda1group,
                 sigmasq=sigmahat1group,
-                standardise_Y=standardise_Y,reCV=standardise_Y,resultsAICboth=F)
+                standardise_Y=standardise_Y,reCV=reCV,resultsAICboth=FALSE)
         output$AICmodels$multigroup$fit <- squeezy(Y,X,groupset,alpha=alpha,model=model,
                        X2=X2,Y2=Y2,unpen=unpen,intrcpt=intrcpt,
                        method="MML",fold=fold,
-                       compareMR = compareMR,selectAIC=F,
+                       compareMR = compareMR,selectAIC=FALSE,
                        fit.ecpc=NULL,
                        lambdas=output$AICmodels$multigroup$lambdas,
                        lambdaglobal=lambda1group,
                        sigmasq=output$AICmodels$multigroup$sigmahat,
-                       standardise_Y=standardise_Y,reCV=standardise_Y,resultsAICboth=F)
+                       standardise_Y=standardise_Y,reCV=reCV,resultsAICboth=FALSE)
     }
     
     output$modelbestAIC <- modelbestAIC
@@ -827,23 +843,10 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   return(output)
 }
 
-#auxiliary function
-#log-determinant; needed below
-.logdet <- function(mat) return(determinant(mat,logarithm=T)$modulus[1])
-
-.SigmaBlocks <- function(XXblocks,lambdas){ #computes X Laminv X^T from block cross-products
-  nblocks <- length(XXblocks)
-  if(nblocks != length(lambdas)){
-    print("Error: Number of penalty parameters should equal number of blocks")
-    return(NULL)
-  } else {
-    Sigma<-Reduce('+', lapply(1:nblocks,function(i) XXblocks[[i]] * 1/lambdas[i]))
-    return(Sigma)
-  }
-}
-
+#Other functions----
+#Minus log marginal likelihood of the Laplace approximation for ridge penalised GLMs----
 minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
-                             Xunpen=NULL,intrcpt=F,model,minlam=0,opt.sigma=F){
+                             Xunpen=NULL,intrcpt=TRUE,model,minlam=0,opt.sigma=FALSE){
   #compute Laplace approximation (LA) of the minus log marginal likelihood of ridge penalised GLMs
   #(NOTE: for now only implemented for linear and logistic)
   #Input:
@@ -852,12 +855,12 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   #Y: response vector
   #sigmasq: noise level in linear regression (1 for logistic)
   #Xunpen: unpenalised variables
-  #intercept: T/F to include intercept
+  #intercept: TRUE/FALSE to include intercept
   #model: "linear" or "logistic" 
-  #opt.sigma: (linear case) T/F if log(sigma^2) is given as first argument of 
+  #opt.sigma: (linear case) TRUE/FALSE if log(sigma^2) is given as first argument of 
   #           loglambdas for optimisation purposes
   if(model!="linear"){
-    opt.sigma <- F
+    opt.sigma <- FALSE
     sigmasq <- 1
   } 
   
@@ -882,7 +885,7 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
     W <- diag(rep(1,n))
     Hpen <- Lam0inv - Lam0inv %*% solve(solve(W)+Lam0inv, Lam0inv)
     
-    t1 <- dmvnorm(c(Y),mean=eta,sigma=sigmasq*diag(rep(1,n)),log=T) #log likelihood in linear predictor
+    t1 <- dmvnorm(c(Y),mean=eta,sigma=sigmasq*diag(rep(1,n)),log=TRUE) #log likelihood in linear predictor
   }else{
     mu <- 1/(1+exp(-eta))
     W <- diag(c(mu)*c(1-mu))
@@ -899,8 +902,9 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   return(-(t1+t2+t3))
 }
 
+#Derivative of minus log marginal likelihood of the Laplace approximation for ridge penalised GLMs----
 dminML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
-                             Xunpen=NULL,intrcpt=F,model,minlam=0,opt.sigma=F){
+                              Xunpen=NULL,intrcpt=TRUE,model,minlam=0,opt.sigma=FALSE){
   #compute Laplace approximation (LA) of the first derivative of the minus log 
   #  marginal likelihood of ridge penalised GLMs
   #(NOTE: for now only implemented for linear and logistic)
@@ -910,13 +914,13 @@ dminML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   #Y: response vector
   #sigmasq: noise level in linear regression (1 for logistic)
   #Xunpen: unpenalised variables
-  #intercept: T/F to include intercept
+  #intercept: TRUE/FALSE to include intercept
   #model: "linear" or "logistic" 
   #minlam: minimum of lambda that is added to the value given (useful in optimisation settings)
-  #opt.sigma: (linear case) T/F if derivative to log(sigma^2) should be given for optimisation purposes
+  #opt.sigma: (linear case) TRUE/FALSE if derivative to log(sigma^2) should be given for optimisation purposes
   #           Note that sigma^2 should then be given as the first argument of loglambdas     
   
-  if(model!="linear") opt.sigma <- F
+  if(model!="linear") opt.sigma <- FALSE
   
   n<-length(Y)
   lambdas <- exp(loglambdas)+minlam
@@ -995,521 +999,228 @@ dminML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   return(c(c(ts.1+ts.2)*sigmasq,(t1+t2+t3+t4))) #derivative to rho
 }
 
-AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
-                             Xunpen=NULL,intrcpt=F,model,minlam=0){
+#Marginal AIC for ridge penalised GLMs----
+mAIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
+                            Xunpen=NULL,intrcpt=TRUE,model,minlam=0){
   
   minLL <- minML.LA.ridgeGLM(loglambdas,XXblocks,Y,sigmasq=sigmasq,
                              Xunpen=Xunpen,intrcpt=intrcpt,model=model,minlam=minlam)
-  k <- length(XXblocks) #number of parameters
+  k <- length(XXblocks) + intrcpt #number of parameters
   if(model=="linear") k <- k+1 #sigma estimated in linear model as well
-  AIC <- 2*minLL + 2*k
-  return(AIC)
+  if(is.matrix(Xunpen)) k <- k+dim(Xunpen)[2]
+  if(is.vector(Xunpen)) k <- k + 1
+  
+  mAIC <- 2*minLL + 2*k
+  return(mAIC)
 }
 
-.cv.squeezy <- function(Y,X,folds,type.measure="MSE",...){
-  #Input:
-  #X: nxp observed data matrix
-  #Y: n-dimensional vector for response
-  #folds: number of folds to evaluate response, or list with samples in each fold
-  #type.measure: type of performance measure for evaluation (MSE or AUC)
-  more.args <- list(...) #more arguments needed for squeezy
+#Normality check----
+normalityCheckQQ <- function(X,groupset,fit.squeezy,nSim=500){
+  lambdapApprox <- fit.squeezy$lambdapApprox
+  alpha <- fit.squeezy$alpha
+  sigmahat <- fit.squeezy$sigmahat
+  tauMR <- fit.squeezy$tauMR
+  n <- dim(X)[1]
   
-  n <- dim(X)[1] #number of samples
-  p <- dim(X)[2] #number of covariates
-  
-  if(!is.element("model",names(more.args))){
-    if(all(is.element(Y,c(0,1))) || is.factor(Y)){
-      model <- "logistic" 
-    } else if(all(is.numeric(Y)) & !(is.matrix(Y) && dim(Y)[2]==2)){
-      model <- "linear"
-    }else{
-      model <- "cox"
-    }
-  }else{
-    model <- more.args$model
-  }
-  
-  if(is.numeric(folds)){ #number of folds given
-    folds2<-.produceFolds(n,folds,Y,balance=balance,model=model) #produce folds balanced in response
-  }else{
-    folds2 <- folds
-  }
-  nfolds <- length(folds2)
-  
-  
-  grpsno <- 1:length(more.args$groupset) #vector with group numbers of the group set
-  
-  Res <- list() #list for raw data
-  df <- data.frame() #data frame for prediction results
-  dfGrps <- data.frame() #data frame for hyperparameter estimation results
-  for(i in 1:nfolds){
-    tic <- proc.time()[[3]]
-    Res[[i]] <- do.call(squeezy,args=c(list(X=X[-folds2[[i]],],Y=Y[-folds2[[i]]],
-                                            X2=X[folds2[[i]],],Y2=Y[folds2[[i]]]),
-                                            more.args)
-    )
-    toc <- proc.time()[[3]]
-    Res[[i]]$time <- toc - tic
+  #sample linear predictors according to elastic net prior distribution
+  sampleEtas <- function(lambdapApprox=lambdapApprox,alpha=alpha,sigmahat=sigmahat,nSim=nSim){
+    #X: data matrix
+    #lambdapApprox: p-dimensional vector with elastic net penalties
+    #alpha: elastic net mixing parameter
+    #sigmahat: (linear regression only) noise variable
+    p<-length(lambdapApprox)
     
-    #update dfPred
-    df2<-data.frame("Ypred"=c(Res[[i]]$YpredMR,Res[[i]]$YpredApprox))
-    df2$Method <- rep(c("multiridge","squeezy_lasso"),each=length(folds2[[i]]))
-    df2$NumberSelectedVars <- rep(c(sum(Res[[i]]$betaMR1!=0),
-                                    sum(Res[[i]]$betaApprox!=0)),each=length(folds2[[i]]))
-    df2$Fold <- i
-    df2$Sample <- rep(folds2[[i]],2)
-    df2$Time <-  Res[[i]]$time
-    df2$Truth <- rep(Y[folds2[[i]]],2)
-    df <- rbind(df,df2)
-    
-    #update dfGrps
-    df3<-data.frame("Group"=rep(grpsno,2),
-                    "Group parameter"=c(Res[[i]]$tauMR,Res[[i]]$tauApprox),
-                    "Penalty parameter"=c(Res[[i]]$lambdaMR,Res[[i]]$lambdaApprox) #note: penalty parameter on glmnet-scale
-                    )
-    df3$Method <- rep(c("multiridge","squeezy_lasso"),each=length(grpsno))
-    df3$Fold <- i
-    dfGrps<-rbind(dfGrps,df3)
-  }
-  
-  #data frame with performance measure
-  if(is.factor(df$Truth)){
-    warning("Response Y given as factor, transformed to numeric to compute AUC")
-    if(!silent) print(levels(df$Truth)[1],"transformed to",0)
-    if(!silent) print(levels(df$Truth)[2],"transformed to",1)
-    df$Truth <- as.numeric(df$Truth)-1
-  }
-  if(type.measure=="MSE"){
-    dfCVM <- df %>% group_by(Method,Fold) %>% summarise(CVM = mean((Ypred-Truth)^2),Type="MSE",
-                                                        NumberSelectedVars=mean(NumberSelectedVars)) %>% ungroup()
-  }
-  else if(type.measure=="AUC"){
-    dfROC<-data.frame()
-    for(i in levels(df$Method)){
-      temp<-data.frame()
-      cutoffs<-rev(seq(0,1,by=0.001))
-      rocGR <- roc(probs=df$Ypred[df$Method==i],true=df$Truth[df$Method==i],cutoffs=cutoffs)
-      temp<-data.frame("FPR"=rocGR[1,],"TPR"=rocGR[2,],"Accuracy"=rocGR[3,])
-      temp$Method <- i
-      temp$AUC<-c(auc(rocGR))
-      temp$NumberSelectedVars<-mean(df$NumberSelectedVars[df$Method==i])
-      dfROC<-rbind(dfROC,temp)
-    }
-    dfCVM <- dfROC %>% group_by(Method) %>% summarise(CVM=mean(AUC),Type="AUC",
-                                                      NumberSelectedVars=mean(NumberSelectedVars)) %>% ungroup()
-  }else{
-    warning(paste("The type of measure",type.measure,"is not yet supported."))
-  }
-  
-  return(list("Res"=Res,"dfPred"=df,"dfGrps"=dfGrps,"dfCVM"=dfCVM))
-}
-
-.traintest.squeezy <- function(Y,X,Y2,X2,type.measure="MSE",
-                                multi_groupset=F,groupset,
-                                args.ecpc=NULL,ecpcinit=T,
-                              ncores=1,
-                                ...){
-  #Input:
-  #X: nxp observed data matrix
-  #Y: n-dimensional vector for response
-  #X2: independent test observed data
-  #Y2: independent test response data
-  #multi_groupset: is a separate groupset given for train/test data sets?
-  #groupset: as in squeezy, or list of groupsets for each train/test data set
-  #type.measure: type of performance measure for evaluation (MSE or AUC)
-  #args.ecpc: list with arguments used for ecpc function
-  #ecpcinit: T/F should ecpc be fit for initialisation?
-  
-  args.squeezy <- list(...) #more arguments needed for squeezy
-  
-  if(is.list(X)) nSim <- length(X)
-  else{
-    nSim <- 1
-    X <- list(X)
-    Y <- list(Y)
-    X2 <- list(X2)
-    Y2 <- list(Y2)
-  } 
-  
-  if(!is.element("model",c(names(args.ecpc),names(args.squeezy)))){
-    if(all(is.element(Y[[1]],c(0,1))) || is.factor(Y[[1]])){
-      model <- "logistic" 
-    } else if(all(is.numeric(Y[[1]])) & !(is.matrix(Y[[1]]) && dim(Y[[1]])[2]==2)){
-      model <- "linear"
+    if(alpha==0){ 
+      #gaussian distribution
+      etas <- sapply(1:nSim,function(x){
+        #simulate betas
+        betas <- rnorm(p, mean=0, sd=sqrt(sigmahat/lambdapApprox))
+        
+        #compute linear predictor eta
+        eta <- X%*%betas
+        return(eta)
+      })
+    }else if(alpha==1){
+      #A Laplace(0,b) variate can also be generated as the difference of two i.i.d. 
+      #Exponential(1/b) random variables
+      etas <- sapply(1:nSim,function(x){
+        #simulate betas
+        betas <- rexp(p, rate=lambdapApprox/2/sigmahat) - rexp(p, rate=lambdapApprox/2/sigmahat)
+        
+        #compute linear predictor eta
+        eta <- X%*%betas
+        return(eta)
+      })
+    }else if(alpha=="horseshoe"){
+      #generate horseshoe prior for comparison
+      etas <- sapply(1:nSim,function(x){
+        #simulate betas
+        tausLatent <- abs(rcauchy(p))
+        betas <- rnorm(p,mean=0,sd=tausLatent*sqrt(sigmahat/lambdapApprox))
+        
+        #compute linear predictor eta
+        eta <- X%*%betas
+        return(eta)
+      })
     }else{
-      model <- "cox"
+      #bayesian elastic net parameters (given sigmasq)
+      lam1 <- alpha*lambdapApprox
+      lam2 <- (1-alpha)*lambdapApprox
+      
+      shape <- 0.5
+      scale <- 8*lam2*sigmahat/lam1^2
+      a <- 1
+      b <- Inf
+      
+      etas <- sapply(1:nSim,function(x){
+        #simulate betas
+        tausLatent <- .rtgamma(p,shape = shape, scale= scale, a=a, b=b)
+        varsBeta <- sigmahat*(tausLatent-1)/lam2/tausLatent
+        betas <- rnorm(p,mean=0,sd=sqrt(varsBeta)) 
+        
+        #compute linear predictor eta
+        eta <- X%*%betas
+        return(eta)
+      })
     }
-  }else if(is.element("model",names(args.squeezy))){
-    model <- args.squeezy$model
-  }else{
-    model <- args.ecpc$model
+    
+    return(etas)
   }
   
-  Res <- list() #list for raw data
-  df <- data.frame() #data frame for prediction results
-  dfGrps <- data.frame() #data frame for hyperparameter estimation results
-  if(ncores==1){
-    for(i in 1:nSim){
-      n <- dim(X[[i]])[1] #number of samples
-      p <- dim(X[[i]])[2] #number of covariates
-      
-      if(!multi_groupset) groupsetTemp <- groupset
-      else groupsetTemp <- groupset[[i]]
-      grpsno <- 1:length(groupsetTemp) #vector with group numbers of the groupset
-      
-      if(ecpcinit){
-        tic <- proc.time()[[3]]
-        res <- do.call(ecpc,args=c(list(X=X[[i]],Y=Y[[i]],
-                                        X2=X2[[i]],Y2=Y2[[i]],
-                                        groupsets=list(groupsetTemp),
-                                        hypershrinkage="none",postselection = F,model=model),
-                                   args.ecpc)
-        )
-        Res[[i]] <- do.call(squeezy,args=c(list(X=X[[i]],Y=Y[[i]],
-                                                X2=X2[[i]],Y2=Y2[[i]],
-                                                groupset=groupsetTemp,fit.ecpc=res),
-                                           args.squeezy)
-        )
-        toc <- proc.time()[[3]]
-        Res[[i]]$time <- toc - tic
-      }else{
-        tic <- proc.time()[[3]]
-        Res[[i]] <- do.call(squeezy,args=c(list(X=X[[i]],Y=Y[[i]],
-                                                X2=X2[[i]],Y2=Y2[[i]],
-                                                groupset=groupsetTemp),
-                                           args.squeezy)
-        )
-        toc <- proc.time()[[3]]
-        Res[[i]]$time <- toc - tic
+  etas <- sampleEtas(lambdapApprox=lambdapApprox,alpha=alpha,sigmahat=sigmahat,nSim=nSim)
+  
+  #create covariance matrix
+  covMat <- function(X=X,groupset=groupset,tauMR=tauMR){
+    p <- dim(X)[2]
+    groupsets <- list(groupset)
+    G <- sapply(groupsets,length) #1xm vector with G_i, number of groups in partition i
+    m <- length(G) #number of partitions
+    
+    indGrpsGlobal <- list(1:G[1]) #global group index in case we have multiple partitions
+    if(m>1){
+      for(i in 2:m){
+        indGrpsGlobal[[i]] <- (sum(G[1:(i-1)])+1):sum(G[1:i])
       }
-      
-      #update dfPred
-      df2<-data.frame("Ypred"=c(Res[[i]]$YpredMR,Res[[i]]$YpredApprox))
-      df2$Method <- rep(c("multiridge","squeezy_EN"),each=length(Y2[[i]]))
-      df2$NumberSelectedVars <- rep(c(sum(Res[[i]]$betaMR!=0),
-                                      sum(Res[[i]]$betaApprox!=0)),each=length(Y2[[i]]))
-      df2$Dataset <- i
-      df2$Sample <- rep(1:length(Y2[[i]]),2)
-      df2$Time <-  Res[[i]]$time
-      df2$Truth <- rep(Y2[[i]],2)
-      df <- rbind(df,df2)
-      
-      #update dfGrps
-      df3<-data.frame("Group"=rep(grpsno,2),
-                      "Group parameter"=c(Res[[i]]$tauMR,Res[[i]]$tauApprox),
-                      "Penalty parameter"=c(Res[[i]]$lambdaMR,Res[[i]]$lambdaApprox) #note: penalty parameter on glmnet-scale
-      )
-      df3$Method <- rep(c("multiridge","squeezy_EN"),each=length(grpsno))
-      df3$Dataset <- i
-      dfGrps<-rbind(dfGrps,df3)
     }
-  }else{
-    cl <- makeCluster(ncores) #set up parallel cluster
-    registerDoParallel(cl)
-    finalMatrix <- foreach(i=1:nfolds, .combine=rbind, 
-                           .packages = c("glmnet","penalized","mvtnorm","gglasso",
-                                         "Matrix","Rsolnp","ecpc")) %dopar% {
-           n <- dim(X[[i]])[1] #number of samples
-           p <- dim(X[[i]])[2] #number of covariates
-           
-           if(!multi_groupset) groupsetTemp <- groupset
-           else groupsetTemp <- groupset[[i]]
-           grpsno <- 1:length(groupsetTemp) #vector with group numbers of the groupset
-           
-           if(ecpcinit){
-             tic <- proc.time()[[3]]
-             res <- do.call(ecpc,args=c(list(X=X[[i]],Y=Y[[i]],
-                                             X2=X2[[i]],Y2=Y2[[i]],
-                                             groupsets=list(groupsetTemp),
-                                             hypershrinkage="none",postselection = F,model=model),
-                                        args.ecpc)
-             )
-             Res[[i]] <- do.call(squeezy,args=c(list(X=X[[i]],Y=Y[[i]],
-                                                     X2=X2[[i]],Y2=Y2[[i]],
-                                                     groupset=groupsetTemp,fit.ecpc=res),
-                                                args.squeezy)
-             )
-             toc <- proc.time()[[3]]
-             Res[[i]]$time <- toc - tic
-           }else{
-             tic <- proc.time()[[3]]
-             Res[[i]] <- do.call(squeezy,args=c(list(X=X[[i]],Y=Y[[i]],
-                                                     X2=X2[[i]],Y2=Y2[[i]],
-                                                     groupset=groupsetTemp),
-                                                args.squeezy)
-             )
-             toc <- proc.time()[[3]]
-             Res[[i]]$time <- toc - tic
-           }
-           
-           #update dfPred
-           df2<-data.frame("Ypred"=c(Res[[i]]$YpredMR,Res[[i]]$YpredApprox))
-           df2$Method <- rep(c("multiridge","squeezy_EN"),each=length(Y2[[i]]))
-           df2$NumberSelectedVars <- rep(c(sum(Res[[i]]$betaMR!=0),
-                                           sum(Res[[i]]$betaApprox!=0)),each=length(Y2[[i]]))
-           df2$Dataset <- i
-           df2$Sample <- rep(1:length(Y2[[i]]),2)
-           df2$Time <-  Res[[i]]$time
-           df2$Truth <- rep(Y2[[i]],2)
-           #df <- rbind(df,df2)
-           
-           #update dfGrps
-           df3<-data.frame("Group"=rep(grpsno,2),
-                           "Group parameter"=c(Res[[i]]$tauMR,Res[[i]]$tauApprox),
-                           "Penalty parameter"=c(Res[[i]]$lambdaMR,Res[[i]]$lambdaApprox) #note: penalty parameter on glmnet-scale
-           )
-           df3$Method <- rep(c("multiridge","squeezy_EN"),each=length(grpsno))
-           df3$Dataset <- i
-           #dfGrps<-rbind(dfGrps,df3)
-           
-           list("Res"=Res,"df"=df2,"dfGrps"=df3)
+    Kg <- lapply(groupsets,function(x)(sapply(x,length))) #m-list with G_i vector of group sizes in partition i
+    #ind1<-ind
+    
+    #ind <- (matrix(1,G,1)%*%ind)==(1:G)#sparse matrix with ij element TRUE if jth element in group i, otherwise FALSE
+    i<-unlist(sapply(1:sum(G),function(x){rep(x,unlist(Kg)[x])}))
+    j<-unlist(unlist(groupsets))
+    ind <- sparseMatrix(i,j,x=1) #sparse matrix with ij element 1 if jth element in group i (global index), otherwise 0
+    
+    Ik <- lapply(1:m,function(i){
+      x<-rep(0,sum(G))
+      x[(sum(G[1:i-1])+1):sum(G[1:i])]<-1
+      as.vector(x%*%ind)}) #list for each partition with px1 vector with number of groups beta_k is in
+    #sparse matrix with ij element 1/Ij if beta_j in group i
+    
+    #make co-data matrix Z (Zt transpose of Z as in paper, with co-data matrices stacked for multiple groupsets)
+    Zt<-ind; 
+    if(G[1]>1){
+      Zt[1:G[1],]<-t(t(ind[1:G[1],])/apply(ind[1:G[1],],2,sum))
     }
-    Res <- lapply(1:nfolds,function(i) finalMatrix[i,1][[1]][[i]])
-    df2 <- lapply(1:nfolds,function(i) finalMatrix[i,2][[1]])
-    dfGrps2 <- lapply(1:nfolds,function(i) finalMatrix[i,3][[1]])
-    df <- df2[[1]]; for(i in 2:nfolds) df <- rbind(df,df2[[i]])
-    dfGrps <- dfGrps2[[1]]; for(i in 2:nfolds) dfGrps <- rbind(dfGrps,dfGrps2[[i]])
-    stopCluster(cl); rm(cl)
+    if(m>1){
+      for(i in 2:m){
+        if(G[i]>1){
+          Zt[indGrpsGlobal[[i]],]<-t(t(ind[indGrpsGlobal[[i]],])/
+                                       apply(ind[indGrpsGlobal[[i]],],2,sum))
+        }
+      }
+    }
+    
+    if(dim(Zt)[2]<p) Zt <- cbind(Zt,matrix(rep(NaN,(p-dim(Zt)[2])*sum(G)),c(sum(G),p-dim(Zt)[2])))
+    
+    
+    #Extend data to make artifical non-overlapping groups----
+    Xxtnd <- do.call(cbind,lapply(groupsets[[1]],function(group){t(t(X[,group])/sqrt(Ik[[1]][group]))}))
+    #create new group indices for Xxtnd
+    Kg2 <- c(1,Kg[[1]]) 
+    G2 <- length(Kg2)-1
+    groupxtnd <- lapply(2:length(Kg2),function(i){sum(Kg2[1:(i-1)]):(sum(Kg2[1:i])-1)}) #list of indices in each group
+    groupxtnd2 <- unlist(sapply(1:G2,function(x){rep(x,Kg2[x+1])})) #vector with group number
+    
+    #datablocks: list with each element a data type containing indices of covariates with that data type 
+    Xbl <- createXblocks(lapply(groupxtnd,function(ind) Xxtnd[,ind]))
+    XXbl <- createXXblocks(lapply(groupxtnd,function(ind) Xxtnd[,ind]))
+    
+    covMat <- SigmaFromBlocks(XXblocks=XXbl,penalties=1/tauMR)
+    
+    return(covMat)
   }
   
-  #data frame with performance measure
-  if(is.factor(df$Truth)){
-    warning("Response Y given as factor, transformed to numeric to compute AUC")
-    if(!silent) print(levels(df$Truth)[1],"transformed to",0)
-    if(!silent) print(levels(df$Truth)[2],"transformed to",1)
-    df$Truth <- as.numeric(df$Truth)-1
-  }
-  if(type.measure=="MSE"){
-    dfCVM <- df %>% group_by(Method,Dataset) %>% summarise(CVM = mean((Ypred-Truth)^2),Type="MSE",
-                                                        NumberSelectedVars=mean(NumberSelectedVars)) %>% ungroup()
-  }
-  else if(type.measure=="AUC"){
-    dfROC<-data.frame()
-    for(i in levels(df$Method)){
-      temp<-data.frame()
-      cutoffs<-rev(seq(0,1,by=0.001))
-      rocGR <- roc(probs=df$Ypred[df$Method==i],true=df$Truth[df$Method==i],cutoffs=cutoffs)
-      temp<-data.frame("FPR"=rocGR[1,],"TPR"=rocGR[2,],"Accuracy"=rocGR[3,])
-      temp$Method <- i
-      temp$AUC<-c(auc(rocGR))
-      temp$NumberSelectedVars<-mean(df$NumberSelectedVars[df$Method==i])
-      dfROC<-rbind(dfROC,temp)
+  covMatX <- covMat(X,groupset,tauMR)
+  
+  #Compute Mahalanobis distance
+  mahala <- function(eta,covMat) {
+    eta <- matrix(eta,nrow=1)
+    dist <- try(eta %*% solve(covMat, t(eta)),silent = TRUE)
+    if(class(dist)[1]=="try-error"){
+      svdcovMat <- svd(covMat)
+      svdd <- svdcovMat$d
+      #reci <- 1/svdd[1:n]
+      reci <- c(1/svdd[1:n-1],0)
+      invforcovMat <- svdcovMat$v %*% (reci * t(svdcovMat$u))
+      dist <- c(eta%*% invforcovMat %*% t(eta))
     }
-    dfCVM <- dfROC %>% group_by(Method) %>% summarise(CVM=mean(AUC),Type="AUC",
-                                                      NumberSelectedVars=mean(NumberSelectedVars)) %>% ungroup()
-  }else{
-    warning(paste("The type of measure",type.measure,"is not yet supported."))
+    return(dist)
   }
   
-  return(list("Res"=Res,"dfPred"=df,"dfGrps"=dfGrps,"dfCVM"=dfCVM))
+  #qq-plot
+  dfs <- nSim
+  mahaladists <- apply(etas,2,mahala,covMat=covMatX)
+  
+  if(requireNamespace("ggplot2")){
+    Sample <- NULL
+    df <- data.frame("Sample"=mahaladists)
+    p <- ggplot2::ggplot(df)+ggplot2::aes(sample=Sample)+
+      ggplot2::geom_qq(distribution=stats::qchisq, dparams = dfs)+
+      ggplot2::geom_qq_line(distribution=stats::qchisq, dparams = dfs,line.p = c(0.25,0.75),col="red")+
+      ggplot2::labs(x="Theoretical quantiles",y="Empirical quantiles")+
+      ggplot2::theme_bw()
+    
+    return(p)
+  }else{
+    qqplot(qchisq(ppoints(500), df = dfs), mahaladists, ylab="Empirical quantiles", xlab="Theoretical quantiles")
+    qqline(mahaladists, distribution = function(p) qchisq(p, df = dfs),
+           probs = c(0.1, 0.6), col = 2)
+    
+    return(NULL)
+  }
+  
 }
 
-.outercv.glmnet <- function(Y,X,folds,type.measure="MSE",...){
-  #Input:
-  #X: nxp observed data matrix
-  #Y: n-dimensional vector for response
-  #folds: number of folds to evaluate response, or list with samples in each fold
-  #type.measure: type of performance measure for evaluation (MSE or AUC)
-  more.args <- list(...) #more arguments needed for squeezy
-  
-  n <- dim(X)[1] #number of samples
-  p <- dim(X)[2] #number of covariates
-  
-  if(!is.element("model",names(more.args))){
-    if(all(is.element(Y,c(0,1))) || is.factor(Y)){
-      model <- "logistic" 
-    } else if(all(is.numeric(Y)) & !(is.matrix(Y) && dim(Y)[2]==2)){
-      model <- "linear"
-    }else{
-      model <- "cox"
-    }
-  }else{
-    model <- more.args$model
+#Internal functions----
+#Log-determinant; needed below----
+.logdet <- function(mat) return(determinant(mat,logarithm=TRUE)$modulus[1])
+
+.SigmaBlocks <- function(XXblocks,lambdas){ #computes X Laminv X^T from block cross-products
+  nblocks <- length(XXblocks)
+  if(nblocks != length(lambdas)){
+    print("Error: Number of penalty parameters should equal number of blocks")
+    return(NULL)
+  } else {
+    Sigma<-Reduce('+', lapply(1:nblocks,function(i) XXblocks[[i]] * 1/lambdas[i]))
+    return(Sigma)
   }
-  
-  if(is.numeric(folds)){ #number of folds given
-    folds2<-.produceFolds(n,folds,Y,balance=balance,model=model) #produce folds balanced in response
-  }else{
-    folds2 <- folds
-  }
-  nfolds <- length(folds2)
-  
-  Res <- list() #list for raw data
-  df <- data.frame() #data frame for prediction results
-  dfGrps <- data.frame() #data frame for hyperparameter estimation results
-  for(i in 1:nfolds){
-    #first compute optimal lambda
-    tic <- proc.time()[[3]]
-    Res[[i]] <- do.call(cv.glmnet,args=c(list(x=X[-folds2[[i]],],y=Y[-folds2[[i]]]),
-                                         more.args)
-    )
-    toc <- proc.time()[[3]]
-    Res[[i]]$time <- toc - tic
-    
-    temp <- coef.glmnet(Res[[i]],s=Res[[i]]$lambda.min,exact=T,
-                        x=X[-folds2[[i]],],y=Y[-folds2[[i]]])
-    Res[[i]]$betaL <- temp[-1]
-    #a0 <- temp[1]
-    fit <- do.call(glmnet,args=c(list(x=X[-folds2[[i]],],y=Y[-folds2[[i]]]),
-                                    more.args))
-    Ypred <- predict.glmnet(fit,newx=X[folds2[[i]],],
-                            s=Res[[i]]$lambda.min,exact=T,
-                            x=X[-folds2[[i]],],y=Y[-folds2[[i]]])
-    #update dfPred
-    df2<-data.frame("Ypred"=c(Ypred))
-    df2$Method <- "lasso"
-    df2$NumberSelectedVars <- sum(Res[[i]]$betaL!=0)
-    df2$Fold <- i
-    df2$Sample <- folds2[[i]]
-    df2$Time <-  Res[[i]]$time
-    df2$Truth <- Y[folds2[[i]]]
-    df <- rbind(df,df2)
-    
-    #update dfGrps
-    df3<-data.frame("Penalty parameter"=Res[[i]]$lambda.min,
-                    "Group"=1) #note: penalty parameter on glmnet-scale
-    df3$Method <- "lasso"
-    df3$Fold <- i
-    dfGrps<-rbind(dfGrps,df3)
-  }
-  
-  #data frame with performance measure
-  if(is.factor(df$Truth)){
-    warning("Response Y given as factor, transformed to numeric to compute AUC")
-    if(!silent) print(levels(df$Truth)[1],"transformed to",0)
-    if(!silent) print(levels(df$Truth)[2],"transformed to",1)
-    df$Truth <- as.numeric(df$Truth)-1
-  }
-  if(type.measure=="MSE"){
-    dfCVM <- df %>% group_by(Method,Fold) %>% summarise(CVM = mean((Ypred-Truth)^2),Type="MSE",
-                                                        NumberSelectedVars=mean(NumberSelectedVars)) %>% ungroup()
-  }
-  else if(type.measure=="AUC"){
-    dfROC<-data.frame()
-    for(i in levels(df$Method)){
-      temp<-data.frame()
-      cutoffs<-rev(seq(0,1,by=0.001))
-      rocGR <- roc(probs=df$Ypred[df$Method==i],true=df$Truth[df$Method==i],cutoffs=cutoffs)
-      temp<-data.frame("FPR"=rocGR[1,],"TPR"=rocGR[2,],"Accuracy"=rocGR[3,])
-      temp$Method <- i
-      temp$AUC<-c(auc(rocGR))
-      temp$NumberSelectedVars<-mean(df$NumberSelectedVars[df$Method==i])
-      dfROC<-rbind(dfROC,temp)
-    }
-    dfCVM <- dfROC %>% group_by(Method) %>% summarise(CVM=mean(AUC),Type="AUC",
-                                                      NumberSelectedVars=mean(NumberSelectedVars)) %>% ungroup()
-  }else{
-    warning(paste("The type of measure",type.measure,"is not yet supported."))
-  }
-  
-  return(list("Res"=Res,"dfPred"=df,"dfGrps"=dfGrps,"dfCVM"=dfCVM))
 }
 
-.traintest.glmnet <- function(Y,X,Y2,X2,type.measure="MSE",
-                               ...){
-  #Input:
-  #X: nxp observed data matrix
-  #Y: n-dimensional vector for response
-  #X2: independent test observed data
-  #Y2: independent test response data
-  #type.measure: type of performance measure for evaluation (MSE or AUC)
-  more.args <- list(...) #more arguments needed for glmnet
-  
-  if(is.list(X)) nSim <- length(X)
-  else{
-    nSim <- 1
-    X <- list(X)
-    Y <- list(Y)
-    X2 <- list(X2)
-    Y2 <- list(Y2)
-  } 
-  
-  if(!is.element("model",names(more.args))){
-    if(all(is.element(Y[[1]],c(0,1))) || is.factor(Y[[1]])){
-      model <- "logistic" 
-    } else if(all(is.numeric(Y[[1]])) & !(is.matrix(Y[[1]]) && dim(Y[[1]])[2]==2)){
-      model <- "linear"
-    }else{
-      model <- "cox"
-    }
-  }else{
-    model <- more.args$model
-  }
-  
-  Res <- list() #list for raw data
-  df <- data.frame() #data frame for prediction results
-  dfGrps <- data.frame() #data frame for hyperparameter estimation results
-  for(i in 1:nSim){
-    n <- dim(X[[i]])[1] #number of samples
-    p <- dim(X[[i]])[2] #number of covariates
-    
-    tic <- proc.time()[[3]]
-    Res[[i]] <- do.call(cv.glmnet,args=c(list(x=X[[i]],y=Y[[i]]),
-                                         more.args)
-    )
-    toc <- proc.time()[[3]]
-    Res[[i]]$time <- toc - tic
-    
-    temp <- coef.glmnet(Res[[i]],s=Res[[i]]$lambda.min,exact=T,
-                        x=X[[i]],y=Y[[i]])
-    Res[[i]]$betaL <- temp[-1]
-    #a0 <- temp[1]
-    fit <- do.call(glmnet,args=c(list(x=X[[i]],y=Y[[i]]),
-                                 more.args))
-    Ypred <- predict.glmnet(fit,newx=X2[[i]],
-                            s=Res[[i]]$lambda.min,exact=T,
-                            x=X[[i]],y=Y[[i]])
-    
-    #update dfPred
-    df2<-data.frame("Ypred"=c(Ypred))
-    df2$Method <- "lasso"
-    df2$NumberSelectedVars <- sum(Res[[i]]$betaL!=0)
-    df2$Dataset <- i
-    df2$Sample <- 1:length(Y2[[i]])
-    df2$Time <-  Res[[i]]$time
-    df2$Truth <- Y2[[i]]
-    df <- rbind(df,df2)
-    
-    #update dfGrps
-    df3<-data.frame("Penalty parameter"=Res[[i]]$lambda.min,
-                    "Group"=1) #note: penalty parameter on glmnet-scale
-    df3$Method <- "lasso"
-    df3$Dataset <- i
-    dfGrps<-rbind(dfGrps,df3)
-  }
-  
-  #data frame with performance measure
-  if(is.factor(df$Truth)){
-    warning("Response Y given as factor, transformed to numeric to compute AUC")
-    if(!silent) print(levels(df$Truth)[1],"transformed to",0)
-    if(!silent) print(levels(df$Truth)[2],"transformed to",1)
-    df$Truth <- as.numeric(df$Truth)-1
-  }
-  if(type.measure=="MSE"){
-    dfCVM <- df %>% group_by(Method,Dataset) %>% summarise(CVM = mean((Ypred-Truth)^2),Type="MSE",
-                                                           NumberSelectedVars=mean(NumberSelectedVars)) %>% ungroup()
-  }
-  else if(type.measure=="AUC"){
-    dfROC<-data.frame()
-    for(i in levels(df$Method)){
-      temp<-data.frame()
-      cutoffs<-rev(seq(0,1,by=0.001))
-      rocGR <- roc(probs=df$Ypred[df$Method==i],true=df$Truth[df$Method==i],cutoffs=cutoffs)
-      temp<-data.frame("FPR"=rocGR[1,],"TPR"=rocGR[2,],"Accuracy"=rocGR[3,])
-      temp$Method <- i
-      temp$AUC<-c(auc(rocGR))
-      temp$NumberSelectedVars<-mean(df$NumberSelectedVars[df$Method==i])
-      dfROC<-rbind(dfROC,temp)
-    }
-    dfCVM <- dfROC %>% group_by(Method) %>% summarise(CVM=mean(AUC),Type="AUC",
-                                                      NumberSelectedVars=mean(NumberSelectedVars)) %>% ungroup()
-  }else{
-    warning(paste("The type of measure",type.measure,"is not yet supported."))
-  }
-  
-  return(list("Res"=Res,"dfPred"=df,"dfGrps"=dfGrps,"dfCVM"=dfCVM))
+
+
+
+
+#Computation of weighted Hat matrix, penalized variables only; needed in IWLS functions----
+.Hpen <- function(WV,XXT){ #WV:weigths as vector (n); XXT: (penalized) sample cross-product (nxn)
+  n <-length(WV)
+  Winv <- diag(1/WV)
+  inv <- solve(Winv + XXT)
+  Mmat <- diag(n) - inv %*% XXT
+  Hmat <- XXT %*% Mmat
+  return(list(Hmat=Hmat,Mmat=Mmat))
 }
 
+#Computation of weighted Hat matrix, possibly with unpenalized variables----
 .Hunpen <- function(WV,XXT,X1){
   #Function from multiridge-package written by Mark van de Wiel
   #WV:weigths as vector (n)
@@ -1545,54 +1256,24 @@ AIC.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   return(list(Hmat=Hmat,MW=MW,KW=KW))
 }
 
-#Computation of weighted Hat matrix, penalized variables only; needed in IWLS functions
-.Hpen <- function(WV,XXT){ #WV:weigths as vector (n); XXT: (penalized) sample cross-product (nxn)
-  n <-length(WV)
-  Winv <- diag(1/WV)
-  inv <- solve(Winv + XXT)
-  Mmat <- diag(n) - inv %*% XXT
-  Hmat <- XXT %*% Mmat
-  return(list(Hmat=Hmat,Mmat=Mmat))
-}
 
-#Produce balanced folds----
-.produceFolds <- function(nsam,outerfold,response,model="logistic",balance=TRUE,fixedfolds=F){
-  if(fixedfolds) set.seed(3648310) #else set.seed(NULL)
-  if(model=="linear") balance=F
-  if(!balance){
-    rand<-sample(1:nsam)
-    grs1 <- floor(nsam/outerfold)
-    grs2 <- grs1+1
-    ngr1 <- outerfold*grs2 - nsam
-    folds <- lapply(1:outerfold,function(xg) {
-      if(xg <= ngr1) els <- rand[(1+(xg-1)*grs1):(xg*grs1)] else els <- rand[(ngr1*grs1 + 1+(xg-ngr1-1)*grs2):(ngr1*grs1 + (xg-ngr1)*grs2)]
-      return(els)
-    }
-    )} else {  #balanced folds
-      if(model=="logistic") if(class(response)=="factor") nev <- which((as.numeric(response)-1)==1) else nev <- which(response==1)  
-      if(model=="survival") nev <- which(response[,1]==1)    
-      nsamev <- length(nev) 
-      randev<-sample(nev)
-      grs1 <- floor(nsamev/outerfold)
-      grs2 <- grs1+1
-      ngr1 <- outerfold*grs2 - nsamev
-      foldsev <- lapply(1:outerfold,function(xg) {
-        if(xg <= ngr1) els <- randev[(1+(xg-1)*grs1):(xg*grs1)] else els <- randev[(ngr1*grs1 + 1+(xg-ngr1-1)*grs2):(ngr1*grs1 + (xg-ngr1)*grs2)]
-        return(els)
-      }
-      )
-      nonev <- setdiff(1:nsam,nev)
-      nsamnonev <- length(nonev) 
-      randnonev<-sample(nonev)
-      grs1 <- floor(nsamnonev/outerfold)
-      grs2 <- grs1+1
-      ngr1 <- outerfold*grs2 - nsamnonev
-      foldsnonev <- lapply(1:outerfold,function(xg) {
-        if(xg <= ngr1) els <- randnonev[(1+(xg-1)*grs1):(xg*grs1)] else els <- randnonev[(ngr1*grs1 + 1+(xg-ngr1-1)*grs2):(ngr1*grs1 + (xg-ngr1)*grs2)]
-        return(els)
-      }
-      )
-      folds <- lapply(1:outerfold,function(i) c(foldsev[[i]],foldsnonev[[i]]))
-    }
-  return(folds)
+#Generate from truncated gamma distribution----
+#Code from: https://rdrr.io/rforge/TruncatedDistributions/man/tgamma.html
+.rtgamma <- function(n, shape, scale = 1, a = 0, b = Inf){
+  stopifnot(n > 0 & all(shape > 0) & all(scale > 0))
+  output <- rep(Inf,n)
+  maxIt <- 50; It <- 1
+  while(any(output==Inf) & It <= maxIt){
+    x <- runif(n)
+    Fa <- pgamma(a, shape, scale = scale)
+    Fb <- pgamma(b, shape, scale = scale)
+    y <- (1 - x) * Fa + x * Fb
+    if(sum(output==Inf)!=length(y)) browser()
+    output[output==Inf] <- qgamma(y, shape, scale = scale)
+    It <- It + 1
+    if(length(shape)>1) shape <- shape[output==Inf]
+    if(length(scale)>1) scale <- scale[output==Inf]
+    n <- sum(output==Inf)
+  }
+  return(output)
 }
