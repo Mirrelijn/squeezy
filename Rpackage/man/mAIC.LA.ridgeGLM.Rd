@@ -1,17 +1,17 @@
-\name{AIC.LA.ridgeGLM}
-\alias{AIC.LA.ridgeGLM}
+\name{mAIC.LA.ridgeGLM}
+\alias{mAIC.LA.ridgeGLM}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{
 %%  ~~function to do ... ~~
-ML AIC of a multi-group, ridge penalised GLMs
+Marginal AIC of a multi-group, ridge penalised GLM
 }
 \description{
 %%  ~~ A concise (1-5 lines) description of what the function does. ~~
-Compute the AIC for the marginal likelihood (ML) of multi-group, ridge penalised generalised linear models. Note: currently only implemented for linear and logistic regression.
+Compute the marginal AIC for the marginal likelihood (ML) of multi-group, ridge penalised generalised linear models. Note: currently only implemented for linear and logistic regression.
 }
 \usage{
-AIC.LA.ridgeGLM(loglambdas, XXblocks, Y, sigmasq = 1, 
-                Xunpen = NULL, intrcpt = F, model, minlam = 0)
+mAIC.LA.ridgeGLM(loglambdas, XXblocks, Y, sigmasq = 1, 
+                Xunpen = NULL, intrcpt = TRUE, model, minlam = 0)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -49,41 +49,36 @@ Type of model for the response; linear or logistic.
 Minimum value of lambda that is added to exp(loglambdas); set to 0 as default.
 }
 }
-\details{
-%%  ~~ If necessary, more details than the description above ~~
-}
+
 \value{
 %%  ~Describe the value returned
 %%  If it is a LIST, use
 %%  \item{comp1 }{Description of 'comp1'}
 %%  \item{comp2 }{Description of 'comp2'}
 %% ...
-  \item{AIC }{AIC of the model}
-}
-\references{
-%% ~put references to the literature/web site here ~
-}
-\author{
-%%  ~~who you are~~
-}
-\note{
-%%  ~~further notes~~
-}
-
-%% ~Make other sections like Warning with \section{Warning }{....} ~
-
-\seealso{
-%% ~~objects to See Also as \code{\link{help}}, ~~~
+  \item{mAIC }{mAIC of the model}
 }
 \examples{
+#Simulate toy data
+n<-100
+p<-300
+X <- matrix(rnorm(n*p),n,p)
+Y <- rnorm(n)
+groupset <- list(1:(p/2),(p/2+1):p)
+sigmahat <- 2
+alpha <- 0.5
+tauMR <- c(0.01,0.005)
 
+XXblocks <- lapply(groupset, function(x)X[,x]\%*\%t(X[,x]))
+
+#compute the mAIC of a co-data model with multiple groups
+mAIC.LA.ridgeGLM(loglambdas=log(sigmahat/tauMR), XXblocks=XXblocks, 
+                 Y = Y, sigmasq = sigmahat, model="linear")
+
+#compute the mAIC of a co-data agnostic model, i.e. only one group of covariates
+mAIC.LA.ridgeGLM(loglambdas=log(sigmahat/median(tauMR)), 
+                 XXblocks=list(X\%*\%t(X)), 
+                 Y = Y, sigmasq = sigmahat, model="linear")
 }
-% Add one or more standard keywords, see file 'KEYWORDS' in the
-% R documentation directory (show via RShowDoc("KEYWORDS")):
-% \keyword{ ~kwd1 }
-% \keyword{ ~kwd2 }
-% Use only one keyword per line.
-% For non-standard keywords, use \concept instead of \keyword:
-% \concept{ ~cpt1 }
-% \concept{ ~cpt2 }
-% Use only one concept per line.
+
+

@@ -16,12 +16,6 @@ See \code{\link{squeezy}} for example code.
 Maintainer: \packageMaintainer{squeezy}
 }
 \references{
-Mirrelijn M. van Nee, Tim van de Brug, Mark A. van de Wiel, "Fast marginal likelihood estimation of penalties for group-adaptive elastic net.", 2020
+Mirrelijn M. van Nee, Tim van de Brug, Mark A. van de Wiel, "Fast marginal likelihood estimation of penalties for group-adaptive elastic net.", 2021
 }
 
-\seealso{
-
-}
-\examples{
-
-}
