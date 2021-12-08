@@ -209,8 +209,8 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   #datablocks <- groupxtnd (or groupset if no overlapping groups)
   
   #datablocks: list with each element a data type containing indices of covariates with that data type 
-  Xbl <- createXblocks(lapply(groupxtnd,function(ind) Xxtnd[,ind]))
-  XXbl <- createXXblocks(lapply(groupxtnd,function(ind) Xxtnd[,ind]))
+  Xbl <- createXblocks(lapply(groupxtnd,function(ind) Xxtnd[,ind,drop=FALSE]))
+  XXbl <- createXXblocks(lapply(groupxtnd,function(ind) Xxtnd[,ind,drop=FALSE]))
   
   #Find global lambda if not given for initial penalty and/or for AIC comparison----
   if(is.null(lambdaglobal)){
