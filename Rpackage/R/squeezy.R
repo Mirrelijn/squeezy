@@ -8,6 +8,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
                       lambdasinit=NULL,sigmasq=NULL,
                       ecpcinit=TRUE,SANN=FALSE,minlam=10^-3,
                       standardise_Y=NULL,reCV=NULL,opt.sigma=NULL,
+                      nrepeat=1,CCV_P=NULL,
                       resultsAICboth=FALSE,silent=FALSE){
   #Y: response
   #X: observed data
@@ -17,7 +18,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   #Y2: independent response data
   #unpen: vector with index of unpenalised variables
   #intrcpt: should intercept be included?
-  #fold: number of folds used in global lambda cross-validation
+  #fold: number of folds used in global lambda cross-validation or MML+CV
   #sigmasq: (linear regression) noise level
   #method: "CV","MML.noDeriv", or "MML"
   #compareMR: TRUE/FALSE to return betas for multiridge estimate, and predictions for Y2 if X2 is given
@@ -78,6 +79,32 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
            if(is.null(reCV)){
              reCV <- FALSE; if(!opt.sigma) reCV <- TRUE
            } 
+         },
+         "MML+CV"={
+           if(!is.null(fit.ecpc)){
+             if(is.null(lambdasinit)) lambdasinit <- fit.ecpc$sigmahat/(fit.ecpc$gamma*fit.ecpc$tauglobal)
+             if(is.null(lambdaglobal)) lambdaglobal <- fit.ecpc$sigmahat/fit.ecpc$tauglobal
+             if(is.null(sigmasq)) sigmasq <- fit.ecpc$sigmahat
+           } 
+           if(is.null(standardise_Y)) standardise_Y <- FALSE
+           if(is.null(opt.sigma)) opt.sigma <- TRUE
+           if(is.null(reCV)){
+             reCV <- FALSE; if(model!="linear" | !opt.sigma) reCV <- TRUE
+           } 
+           
+         },
+         "MML+CCV"={
+           if(!is.null(fit.ecpc)){
+             if(is.null(lambdasinit)) lambdasinit <- fit.ecpc$sigmahat/(fit.ecpc$gamma*fit.ecpc$tauglobal)
+             if(is.null(lambdaglobal)) lambdaglobal <- fit.ecpc$sigmahat/fit.ecpc$tauglobal
+             if(is.null(sigmasq)) sigmasq <- fit.ecpc$sigmahat
+           } 
+           if(is.null(standardise_Y)) standardise_Y <- FALSE
+           if(is.null(opt.sigma)) opt.sigma <- TRUE
+           if(is.null(reCV)){
+             reCV <- FALSE; if(model!="linear" | !opt.sigma) reCV <- TRUE
+           } 
+           
          },
          "CV"={
            if(!is.null(fit.ecpc)){
@@ -156,6 +183,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   
   G <- sapply(groupsets,length) #1xm vector with G_i, number of groups in partition i
   m <- length(G) #number of partitions
+  if(is.null(CCV_P)) CCV_P <- floor(max(0.9*n, n-10*G))
   
   indGrpsGlobal <- list(1:G[1]) #global group index in case we have multiple partitions
   if(m>1){
@@ -212,6 +240,13 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   Xbl <- createXblocks(lapply(groupxtnd,function(ind) Xxtnd[,ind,drop=FALSE]))
   XXbl <- createXXblocks(lapply(groupxtnd,function(ind) Xxtnd[,ind,drop=FALSE]))
   
+  if(method=="MML+CV"){
+    folds_y <- do.call(c,replicate(nrepeat,produceFolds(n,outerfold=fold,response=Y,balance=TRUE),simplify=FALSE))
+  }
+  if(method=="MML+CCV"){
+    folds_y <- replicate(nrepeat,sample(1:n,size=CCV_P,replace = FALSE),simplify=FALSE)
+  }
+  
   #Find global lambda if not given for initial penalty and/or for AIC comparison----
   if(is.null(lambdaglobal)){
     #find rough estimate of initial global lambda
@@ -219,7 +254,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
     # lambda <- cvperblock$lambdas
     # lambda[lambda==Inf] <- 10^6
     
-    lambdaseq <- 10^c(-10:10)
+    lambdaseq <- 10^c(-6:6) #lambdaseq <- 10^seq(-3,2,length.out=30)
     XXbl1 <- list(apply(simplify2array(XXbl),c(1,2),sum))
     ML <- sapply(log(lambdaseq),function(lam){
       temp <- try(minML.LA.ridgeGLM(loglambdas = lam,XXblocks = XXbl1,sigmasq=sd_y^2,
@@ -230,7 +265,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
       }else return(NaN)
       }
     )
-    
+    #plot(log(lambdaseq),ML)
     
     if(all(is.nan(ML))) stop("Error in estimating global lambda, try standardising data")
     lambdaseq <- lambdaseq[!is.nan(ML)&(ML!=Inf)]
@@ -253,7 +288,6 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
   }else{
     lambda <- lambdaglobal
   }
-    
   #Further optimise global lambda with same method as multi-group for AIC comparison
   if(selectAIC | compareMR){
     if(method=="CV"){
@@ -291,6 +325,66 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
                                  XXblocks = list(apply(simplify2array(XXbl),c(1,2),sum)) ,
                                  Y=Y,sigmasq=sigmahat,model=model,
                                  intrcpt=intrcpt, Xunpen=Xunpen,opt.sigma=opt.sigma)
+        lambda <- exp(lambda1groupfit$par)+minlam
+      }
+      
+    }else if(method=="MML+CV" | method=="MML+CCV"){
+      
+      sigmahat<-sd_y 
+      if(!is.null(sigmasq) & model=="linear") sigmahat <- sigmasq
+      fn2 <- function(loglambdas){
+        #marginal log likelihood log(p(Y_{-i})) for left out sample(s) i:
+        minML_fold_left_out <- function(one_fold){
+          #one_sample: vector with indices to be left out
+          #return minus log approximate marginal likelihood
+          minLL <- minML.LA.ridgeGLM(loglambdas=loglambdas,minlam=minlam,
+                            XXblocks = list(apply(simplify2array(XXbl)[-one_fold,-one_fold,],c(1,2),sum)) ,
+                            Y=Y[-one_fold],
+                            sigmasq=sigmahat,model=model,
+                            intrcpt=intrcpt, Xunpen=Xunpen,opt.sigma=opt.sigma)
+          return(minLL)
+        }
+        #marginal log likelihood log(p(Y_{1:n}))
+        minML_all<- minML.LA.ridgeGLM(loglambdas=loglambdas,minlam=minlam,
+                                     XXblocks = list(apply(simplify2array(XXbl),c(1,2),sum)) ,
+                                     Y=Y,
+                                     sigmasq=sigmahat,model=model,
+                                     intrcpt=intrcpt, Xunpen=Xunpen,opt.sigma=opt.sigma)
+        #for K folds, compute cross-validated CPO: 1/K*sum_k(log(p(y_i|y_{-i})))
+        # same as: 1/K*sum_k(log(p(Y_{1:n})) - log(p(Y_{-i})) )
+        CPO <- minML_all - mean(sapply(folds_y, minML_fold_left_out))
+        return(CPO)
+      }
+      gr2 <- function(loglambdas){
+        #derivative marginal log likelihood log(p(Y_{-i})) for left out sample(s) i:
+        dminML_fold_left_out <- function(one_fold){
+          #one_sample: vector with indices to be left out
+          #return minus log approximate marginal likelihood
+          dminLL <- dminML.LA.ridgeGLM(loglambdas=loglambdas,minlam=minlam,
+                                     XXblocks = list(apply(simplify2array(XXbl)[-one_fold,-one_fold,],c(1,2),sum)) ,
+                                     Y=Y[-one_fold],
+                                     sigmasq=sigmahat,model=model,
+                                     intrcpt=intrcpt, Xunpen=Xunpen,opt.sigma=opt.sigma)
+          return(dminLL)
+        }
+        #derivative marginal log likelihood log(p(Y_{1:n}))
+        dminML_all<- dminML.LA.ridgeGLM(loglambdas=loglambdas,minlam=minlam,
+                                      XXblocks = list(apply(simplify2array(XXbl),c(1,2),sum)) ,
+                                      Y=Y,
+                                      sigmasq=sigmahat,model=model,
+                                      intrcpt=intrcpt, Xunpen=Xunpen,opt.sigma=opt.sigma)
+        #derivative CPO:
+        dCPO <- dminML_all - mean(sapply(folds_y, dminML_fold_left_out))
+        return(dCPO)
+      }
+      if(opt.sigma){
+        lambda1groupfit <- optim(par=c(log(sigmahat),log(lambda)), fn=fn2,
+                                 gr=gr2, method="BFGS")
+        sigmasq <- exp(lambda1groupfit$par[1])+minlam
+        lambda <- exp(lambda1groupfit$par[-1])+minlam
+      }else{
+        lambda1groupfit <- optim(par=log(lambda), fn=fn2,
+                                 gr=gr2, method="BFGS")
         lambda <- exp(lambda1groupfit$par)+minlam
       }
       
@@ -423,6 +517,81 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
       }
         
       
+    }else if(method=="MML+CV" | method=="MML+CCV"){
+      fn2 <- function(loglambdas){
+        #marginal log likelihood log(p(Y_{-i})) for left out sample(s) i:
+        minML_fold_left_out <- function(one_fold){
+          #one_sample: vector with indices to be left out
+          #return minus log approximate marginal likelihood
+          minLL <- minML.LA.ridgeGLM(loglambdas=loglambdas,minlam=minlam,
+                                     XXblocks = lapply(1:G,function(x)simplify2array(XXbl)[-one_fold,-one_fold,x]),
+                                     Y=Y[-one_fold],
+                                     sigmasq=sigmahat,model=model,
+                                     intrcpt=intrcpt, Xunpen=Xunpen,opt.sigma=opt.sigma)
+          return(minLL)
+        }
+        #marginal log likelihood log(p(Y_{1:n}))
+        minML_all<- minML.LA.ridgeGLM(loglambdas=loglambdas,minlam=minlam,
+                                      XXblocks = XXbl,
+                                      Y=Y,
+                                      sigmasq=sigmahat,model=model,
+                                      intrcpt=intrcpt, Xunpen=Xunpen,opt.sigma=opt.sigma)
+        #for K folds, compute cross-validated CPO: 1/K*sum_k(log(p(y_i|y_{-i})))
+        # same as: 1/K*sum_k(log(p(Y_{1:n})) - log(p(Y_{-i})) )
+        CPO <- minML_all - mean(sapply(folds_y, minML_fold_left_out))
+        return(CPO)
+      }
+      gr2 <- function(loglambdas){
+        #derivative marginal log likelihood log(p(Y_{-i})) for left out sample(s) i:
+        dminML_fold_left_out <- function(one_fold){
+          #one_sample: vector with indices to be left out
+          #return minus log approximate marginal likelihood
+          dminLL <- dminML.LA.ridgeGLM(loglambdas=loglambdas,minlam=minlam,
+                                       XXblocks = lapply(1:G,function(x)simplify2array(XXbl)[-one_fold,-one_fold,x]),
+                                       Y=Y[-one_fold],
+                                       sigmasq=sigmahat,model=model,
+                                       intrcpt=intrcpt, Xunpen=Xunpen,opt.sigma=opt.sigma)
+          return(dminLL)
+        }
+        #derivative marginal log likelihood log(p(Y_{1:n}))
+        dminML_all<- dminML.LA.ridgeGLM(loglambdas=loglambdas,minlam=minlam,
+                                        XXblocks = XXbl,
+                                        Y=Y,
+                                        sigmasq=sigmahat,model=model,
+                                        intrcpt=intrcpt, Xunpen=Xunpen,opt.sigma=opt.sigma)
+        #derivative CPO:
+        if(G>1){
+          dCPO <- dminML_all - apply(sapply(folds_y, dminML_fold_left_out),1,mean)
+        }else{
+          dCPO <- dminML_all - mean(sapply(folds_y, dminML_fold_left_out))
+        } 
+        return(dCPO)
+      }
+      if(opt.sigma){
+        jointlambdas <- optim(par=c(log(sigmahat),log(lambdasinit)), 
+                              fn=fn2, 
+                              gr=gr2, method="BFGS")
+        sigmasq <- exp(jointlambdas$par[1])+minlam
+        lambdas <- exp(jointlambdas$par[-1])+minlam
+        
+        # MLinit <- minML.LA.ridgeGLM(loglambdas=c(log(sigmahat),log(lambdasinit)),opt.sigma = TRUE,
+        #                             XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
+        # MLfinal <- minML.LA.ridgeGLM(loglambdas=c(log(sigmasq),log(lambdas)),
+        #                              opt.sigma = TRUE,
+        #                              XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
+        
+      }else{
+        jointlambdas <- optim(par=log(lambdasinit), fn=fn2, 
+                              gr=gr2, method="BFGS")
+        lambdas <- exp(jointlambdas$par)+minlam
+        
+        # MLinit <- minML.LA.ridgeGLM(loglambdas=c(log(lambdasinit)),opt.sigma = FALSE,
+        #                             sigmasq=sigmahat,
+        #                             XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
+        # MLfinal <- minML.LA.ridgeGLM(loglambdas=c(log(lambdas)),
+        #                              opt.sigma = FALSE,sigmasq=sigmasq,
+        #                              XXblocks = XXbl , Y=Y,model=model,intrcpt=intrcpt,minlam=0)
+      }
     }
   }else{
     lambdasinit <- lambdas
@@ -705,7 +874,7 @@ squeezy <- function(Y,X,groupset,alpha=1,model=NULL,
         lambdaMR_reCV <- sigmahat/sapply(sigmahat/lambdasEN_reCV,varFunc,alpha=alpha,tauR=0)
         
       } else{
-        sopt <- lambdaEN/n*sd_y
+        sopt <- lambdaEN/n*sd_y #* n/p/2
         lambdaMR_reCV <- lambdas
       } 
       
@@ -863,7 +1032,6 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
     opt.sigma <- FALSE
     sigmasq <- 1
   } 
-  
   n<-length(Y)
   lambdas <- exp(loglambdas)+minlam
   if(opt.sigma){
@@ -889,10 +1057,10 @@ minML.LA.ridgeGLM<- function(loglambdas,XXblocks,Y,sigmasq=1,
   }else{
     mu <- 1/(1+exp(-eta))
     W <- diag(c(mu)*c(1-mu))
-    
     #Hpen <- Lam0inv - Lam0inv %*% solve(diag(1/diag(W))+Lam0inv, Lam0inv)
     Hpen <- Lam0inv - Lam0inv %*% solve(diag(1,n)+W%*%Lam0inv, W%*%Lam0inv)
     
+    #t1 <- sum(Y*log(pmax(10^-16,mu))+(1-Y)*log(pmax(10^-16,1-mu))) #log likelihood in linear predictor
     t1 <- sum(Y*log(mu)+(1-Y)*log(1-mu)) #log likelihood in linear predictor
   }
   
