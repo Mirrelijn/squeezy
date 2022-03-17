@@ -1076,6 +1076,7 @@ normalityCheckQQ <- function(X,groupset,fit.squeezy,nSim=500){
         #simulate betas
         tausLatent <- .rtgamma(p,shape = shape, scale= scale, a=a, b=b)
         varsBeta <- sigmahat*(tausLatent-1)/lam2/tausLatent
+        varsBeta[tausLatent==Inf] <- sigmahat/lam2[tausLatent==Inf]
         betas <- rnorm(p,mean=0,sd=sqrt(varsBeta)) 
         
         #compute linear predictor eta
@@ -1269,10 +1270,11 @@ normalityCheckQQ <- function(X,groupset,fit.squeezy,nSim=500){
     Fb <- pgamma(b, shape, scale = scale)
     y <- (1 - x) * Fa + x * Fb
     if(sum(output==Inf)!=length(y)) browser()
-    output[output==Inf] <- qgamma(y, shape, scale = scale)
+    temp <- qgamma(y, shape, scale = scale)
+    output[output==Inf] <- temp
     It <- It + 1
-    if(length(shape)>1) shape <- shape[output==Inf]
-    if(length(scale)>1) scale <- scale[output==Inf]
+    if(length(shape)>1) shape <- shape[temp==Inf]
+    if(length(scale)>1) scale <- scale[temp==Inf]
     n <- sum(output==Inf)
   }
   return(output)
