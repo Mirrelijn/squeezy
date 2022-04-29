@@ -2,7 +2,7 @@ Package: squeezy
 Type: Package
 Title: Group-Adaptive Elastic Net Penalised Generalised Linear Models
 Version: 1.1
-Date: 2021-06-07
+Date: 2022-03-22
 Authors@R: c(person(c("Mirrelijn","M."), "van Nee", role = c("aut", "cre"),
                      email = "m.vannee@amsterdamumc.nl"),
               person("Tim", "van de Brug", role = "aut"),
